@@ -1,0 +1,12 @@
+{
+  "name": "smkn8sby-website",
+  "private": true,
+  "description": "Website resmi SMK Negeri 8 Surabaya (Cloudflare Pages + D1)",
+  "scripts": {
+    "dev": "wrangler pages dev",
+    "deploy": "wrangler pages deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}

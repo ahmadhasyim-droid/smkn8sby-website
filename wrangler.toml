@@ -1,0 +1,11 @@
+# Konfigurasi Cloudflare Pages untuk website SMKN 8 Surabaya
+name = "smkn8sby"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "public"
+
+# Database D1 — ganti database_id dengan ID database Anda
+# (Cloudflare Dashboard > Storage & Databases > D1 > smkn8sby-db > salin "Database ID")
+[[d1_databases]]
+binding = "DB"
+database_name = "smkn8sby-db"
+database_id = "GANTI-DENGAN-DATABASE-ID-ANDA"
