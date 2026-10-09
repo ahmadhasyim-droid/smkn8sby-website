@@ -25,6 +25,21 @@ async function cachedFeed(db, key, loader) {
 }
 const xmlText = (s) => String(s || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+// Ubah handle/nama kanal (mis. "smknegeri8surabayaofficial32" atau link /@handle) menjadi ID kanal UC…
+async function resolveChannelId(db, v) {
+  const direct = channelIdFrom(v);
+  if (direct) return direct;
+  const handle = String(v || '').trim().replace(/^https?:\/\/(www\.|m\.)?youtube\.com\//i, '').replace(/^@/, '').split(/[/?#]/)[0];
+  if (!/^[\w.-]{3,100}$/.test(handle)) return '';
+  const key = 'ytid:' + handle.toLowerCase();
+  const c = await cacheGet(db, key);
+  if (c) return JSON.parse(c.value);
+  const r = await fetch(`https://www.youtube.com/@${encodeURIComponent(handle)}`, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'id,en' } });
+  const html = r.ok ? await r.text() : '';
+  const id = (html.match(/"(?:externalId|channelId|browseId)":"(UC[\w-]{22})"/) || html.match(/youtube\.com\/channel\/(UC[\w-]{22})/) || [])[1] || '';
+  if (id) await cachePut(db, key, id);
+  return id;
+}
 function channelIdFrom(v) { const m = String(v || '').match(/(UC[\w-]{22})/); return m ? m[1] : ''; }
 async function loadYouTube(channelId) {
   const r = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`, { headers: { 'User-Agent': 'Mozilla/5.0 (SMKN8SBY website)' } });
@@ -295,8 +310,8 @@ export async function onRequest(ctx) {
       const hdr = { 'Cache-Control': 'public, max-age=300' };
       if (parts[1] === 'youtube') {
         const url = await db.prepare(`SELECT value FROM settings WHERE key='youtube'`).first('value');
-        const ch = channelIdFrom(url);
-        if (!ch) return json({ items: [], error: 'ID kanal YouTube belum diisi (gunakan link /channel/UC…).' }, 200, hdr);
+        const ch = await resolveChannelId(db, url).catch(() => '');
+        if (!ch) return json({ items: [], error: 'Kanal YouTube tidak ditemukan. Isi dengan link https://www.youtube.com/channel/UC…' }, 200, hdr);
         try { return json(await cachedFeed(db, 'yt:' + ch, () => loadYouTube(ch)), 200, hdr); }
         catch (e) { return json({ items: [], error: 'Feed YouTube belum tersedia.' }, 200, hdr); }
       }

@@ -1,10 +1,12 @@
 {
-  "name": "smanesa-kantin-digital",
-  "version": "2.0.0",
+  "name": "smkn8sby-website",
   "private": true,
-  "type": "module",
-  "description": "Pembayaran kantin non-tunai SMA Negeri 1 Purwoasri — Cloudflare Pages + D1",
+  "description": "Website resmi SMK Negeri 8 Surabaya (Cloudflare Pages + D1)",
   "scripts": {
-    "dev": "node --no-warnings tests/devserver.mjs"
+    "dev": "wrangler pages dev",
+    "deploy": "wrangler pages deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
   }
 }

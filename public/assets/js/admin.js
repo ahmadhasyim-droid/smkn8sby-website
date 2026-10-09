@@ -264,6 +264,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 7</span>
       </div>
     </aside>
     <div class="main">
@@ -478,7 +479,7 @@ V.settings = async (view) => {
     ['Kontak & media sosial', [
       { k: 'address', label: 'Alamat' }, { k: 'maps_query', label: 'Kata kunci peta Google Maps', help: 'Nama/alamat sekolah persis seperti di Google Maps.' },
       { k: 'email', label: 'Email', type: 'email', half: true }, { k: 'phone', label: 'Telepon', half: true }, { k: 'whatsapp', label: 'WhatsApp', half: true },
-      { k: 'instagram', label: 'Instagram (tanpa @)', half: true }, { k: 'facebook', label: 'Facebook (nama pengguna)', half: true }, { k: 'youtube_name', label: 'Nama kanal YouTube (yang tampil)', half: true }, { k: 'youtube', label: 'Link kanal YouTube', help: 'Gunakan link berbentuk https://www.youtube.com/channel/UC… agar video terbaru bisa tampil otomatis.' },
+      { k: 'instagram', label: 'Instagram (tanpa @)', half: true }, { k: 'facebook', label: 'Facebook (nama pengguna)', half: true }, { k: 'youtube_name', label: 'Nama kanal YouTube (yang tampil)', half: true }, { k: 'youtube', label: 'Link kanal YouTube', help: 'Isi link kanal (https://www.youtube.com/channel/UC… atau https://www.youtube.com/@namakanal) atau nama kanal tanpa @.' },
     ]],
   ];
   const all = groups.flatMap(([, f]) => f);
