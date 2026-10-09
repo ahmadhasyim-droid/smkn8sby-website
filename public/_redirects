@@ -1,6 +1,0 @@
-# Alamat cantik untuk halaman jurusan, lembaga, dan berita
-/jurusan/:slug   /unit     200
-/lembaga/:slug   /unit     200
-/berita/:slug    /artikel  200
-/login           /admin/   302
-/tefa/:slug      /unit     200
