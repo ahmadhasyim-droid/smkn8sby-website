@@ -468,10 +468,17 @@ V.settings = async (view) => {
       { k: 'principal_photo', label: 'Foto (potret)', type: 'image' }, { k: 'principal_message', label: 'Kata sambutan', type: 'textarea', rows: 8 },
     ]],
     ['Profil', [{ k: 'sejarah', label: 'Sejarah singkat', type: 'textarea', rows: 6 }, { k: 'visi', label: 'Visi', type: 'textarea', rows: 2 }, { k: 'misi', label: 'Misi (satu baris satu poin)', type: 'textarea', rows: 6 }]],
+    ['Video & Instagram otomatis', [
+      { k: 'show_youtube', label: 'Video YouTube di beranda & galeri', type: 'select', half: true, opts: () => [{ v: '1', l: 'Tampilkan' }, { v: '0', l: 'Sembunyikan' }] },
+      { k: 'show_instagram', label: 'Feed Instagram di beranda', type: 'select', half: true, opts: () => [{ v: '1', l: 'Tampilkan' }, { v: '0', l: 'Sembunyikan' }] },
+      { k: 'ig_feed_url', label: 'Cara mudah: URL feed Instagram (JSON) dari Behold.so', type: 'url', placeholder: 'https://feeds.behold.so/…', help: 'Daftar gratis di behold.so, hubungkan akun Instagram sekolah, buat feed bertipe JSON, lalu tempel URL-nya di sini.' },
+      { k: 'ig_token', label: 'Atau: Instagram access token (dari Meta Developer)', help: 'Opsional. Cara mendapatkannya ada di README bagian "Feed Instagram otomatis". Token diperpanjang otomatis oleh sistem dan tidak pernah ditampilkan ke pengunjung.' },
+      { k: 'ig_posts', label: 'Atau: link postingan Instagram pilihan (satu per baris, maks. 6)', type: 'textarea', rows: 4, help: 'Dipakai bila token belum diisi. Contoh: https://www.instagram.com/p/XXXXXXXX/' },
+    ]],
     ['Kontak & media sosial', [
       { k: 'address', label: 'Alamat' }, { k: 'maps_query', label: 'Kata kunci peta Google Maps', help: 'Nama/alamat sekolah persis seperti di Google Maps.' },
       { k: 'email', label: 'Email', type: 'email', half: true }, { k: 'phone', label: 'Telepon', half: true }, { k: 'whatsapp', label: 'WhatsApp', half: true },
-      { k: 'instagram', label: 'Instagram (tanpa @)', half: true }, { k: 'facebook', label: 'Facebook (nama pengguna)', half: true }, { k: 'youtube', label: 'YouTube (nama kanal tanpa @)', half: true },
+      { k: 'instagram', label: 'Instagram (tanpa @)', half: true }, { k: 'facebook', label: 'Facebook (nama pengguna)', half: true }, { k: 'youtube_name', label: 'Nama kanal YouTube (yang tampil)', half: true }, { k: 'youtube', label: 'Link kanal YouTube', help: 'Gunakan link berbentuk https://www.youtube.com/channel/UC… agar video terbaru bisa tampil otomatis.' },
     ]],
   ];
   const all = groups.flatMap(([, f]) => f);

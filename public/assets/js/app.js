@@ -133,9 +133,11 @@ const socialLinks = (s) => {
   const out = [];
   if (s.instagram) out.push(`<a href="https://instagram.com/${esc(s.instagram)}" target="_blank" rel="noopener" aria-label="Instagram">${icon('instagram')}</a>`);
   if (s.facebook) out.push(`<a href="https://facebook.com/${esc(s.facebook)}" target="_blank" rel="noopener" aria-label="Facebook">${icon('facebook')}</a>`);
-  if (s.youtube) out.push(`<a href="https://youtube.com/@${esc(s.youtube)}" target="_blank" rel="noopener" aria-label="YouTube">${icon('youtube')}</a>`);
+  if (s.youtube) out.push(`<a href="${esc(ytUrl(s.youtube))}" target="_blank" rel="noopener" aria-label="YouTube ${esc(ytName(s))}">${icon('youtube')}</a>`);
   return out.join('');
 };
+const ytUrl = (v) => (/^https?:\/\//i.test(v) ? safeUrl(v) : `https://youtube.com/@${encodeURIComponent(String(v).replace(/^@/, ''))}`);
+const ytName = (s) => s.youtube_name || s.youtube;
 const waLink = (n) => 'https://wa.me/' + String(n).replace(/\D/g, '').replace(/^0/, '62');
 
 // ---------- Kerangka: header & footer ----------
@@ -207,7 +209,7 @@ function renderShell() {
         <li><a href="/admin/">Login Pengelola</a></li></ul></div>
     </div>
     <div class="foot-bottom"><span>© ${new Date().getFullYear()} ${esc(s.school_name)}. Hak cipta dilindungi.</span>
-      <span>${s.instagram ? `IG & FB @${esc(s.instagram)}` : ''}${s.youtube ? ` · YouTube ${esc(s.youtube)}` : ''}</span></div>
+      <span>${[s.instagram && `IG @${esc(s.instagram)}`, s.facebook && `FB @${esc(s.facebook)}`, s.youtube && `YouTube ${esc(ytName(s))}`].filter(Boolean).join(' · ')}</span></div>
   </div></footer>
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="true"><button aria-label="Tutup">${icon('x')}</button><div><img alt=""><p></p></div></div>`;
 
@@ -250,6 +252,62 @@ function skyline() {
 //  HALAMAN
 // =============================================================
 const PAGES = {};
+
+// ---------- Video YouTube & Instagram (otomatis) ----------
+const relTime = (iso) => fmtDate(iso, { day: 'numeric', month: 'short', year: 'numeric' });
+const ytThumb = (v) => `<span class="yt-thumb"><img src="${esc(v.thumb)}" alt="" loading="lazy"><span class="yt-play" aria-hidden="true"><svg viewBox="0 0 68 48"><path d="M66.5 7.7A8.5 8.5 0 0 0 60.5 1.7C55.2.3 34 .3 34 .3S12.8.3 7.5 1.7a8.5 8.5 0 0 0-6 6C.1 13 .1 24 .1 24s0 11 1.4 16.3a8.5 8.5 0 0 0 6 6c5.3 1.4 26.5 1.4 26.5 1.4s21.2 0 26.5-1.4a8.5 8.5 0 0 0 6-6C67.9 35 67.9 24 67.9 24s0-11-1.4-16.3z" fill="#f00"/><path d="M45 24L27 14v20z" fill="#fff"/></svg></span>${v.short ? '<span class="yt-badge">Shorts</span>' : ''}</span>`;
+const ytEmbed = (id) => `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0" title="Video YouTube" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`;
+const ytCard = (v) => `<div class="yt-card"><button class="yt-frame" data-yt="${esc(v.id)}" aria-label="Putar: ${esc(v.title)}">${ytThumb(v)}</button>
+  <a class="yt-title" href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.title)}</a><span class="yt-meta">${relTime(v.published)}${v.views ? ` · ${v.views.toLocaleString('id-ID')}× ditonton` : ''}</span></div>`;
+// Klik thumbnail -> putar video di tempat (video baru dimuat saat diklik, agar halaman tetap ringan)
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-yt]'); if (!b) return;
+  e.preventDefault();
+  const target = b.dataset.ytTarget ? document.getElementById(b.dataset.ytTarget) : b;
+  if (b.dataset.ytTarget) { target.innerHTML = ytEmbed(b.dataset.yt); target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  else b.outerHTML = `<div class="yt-frame playing">${ytEmbed(b.dataset.yt)}</div>`;
+});
+
+async function renderYouTube(box, { limit = 5, layout = 'feature' } = {}) {
+  const s = SITE.settings;
+  const d = await api('feeds/youtube').catch(() => ({ items: [] }));
+  const items = (d.items || []).slice(0, limit);
+  if (!items.length) {
+    box.innerHTML = `<div class="social-cta">${icon('youtube')}<div><b>Tonton video kegiatan kami</b><span>Kanal YouTube ${esc(ytName(s))}</span></div><a class="btn btn-orange" href="${esc(ytUrl(s.youtube))}" target="_blank" rel="noopener">Buka YouTube ${icon('arrowUR')}</a></div>`;
+    return;
+  }
+  if (layout === 'grid') { box.innerHTML = `<div class="yt-grid">${items.map(ytCard).join('')}</div>`; return; }
+  const [first, ...rest] = items;
+  box.innerHTML = `<div class="yt-layout">
+    <div class="yt-main"><div class="yt-frame" id="ytStage"><button class="yt-frame" data-yt="${esc(first.id)}" aria-label="Putar: ${esc(first.title)}">${ytThumb(first)}</button></div>
+      <h3 id="ytStageTitle">${esc(first.title)}</h3><span class="yt-meta" id="ytStageMeta">${relTime(first.published)}</span></div>
+    <div class="yt-list">${rest.map((v) => `<button class="yt-item" data-yt="${esc(v.id)}" data-yt-target="ytStage" data-title="${esc(v.title)}" data-date="${esc(relTime(v.published))}">${ytThumb(v)}<span><b>${esc(v.title)}</b><small>${relTime(v.published)}</small></span></button>`).join('')}</div>
+  </div>`;
+  box.querySelectorAll('.yt-item').forEach((b) => b.addEventListener('click', () => {
+    $('#ytStageTitle').textContent = b.dataset.title; $('#ytStageMeta').textContent = b.dataset.date;
+  }));
+}
+
+async function renderInstagram(box) {
+  const s = SITE.settings, handle = s.instagram;
+  const follow = `<a class="btn btn-dark" href="https://instagram.com/${esc(handle)}" target="_blank" rel="noopener">${icon('instagram')} Ikuti @${esc(handle)}</a>`;
+  const d = s.ig_connected ? await api('feeds/instagram').catch(() => ({ items: [] })) : { items: [] };
+  if (d.items && d.items.length) {
+    box.innerHTML = `<div class="ig-grid">${d.items.slice(0, 12).map((m) => `<a class="ig-tile" href="${esc(safeUrl(m.permalink))}" target="_blank" rel="noopener">
+      <img src="${/(cdninstagram\.com|fbcdn\.net)\//.test(m.image) ? '/api/feeds/ig-img?u=' + encodeURIComponent(m.image) : esc(m.image)}" alt="${esc(m.caption.slice(0, 120))}" loading="lazy">
+      ${m.type === 'VIDEO' ? `<span class="ig-type">${icon('youtube')}</span>` : m.type === 'CAROUSEL_ALBUM' ? `<span class="ig-type">${icon('image')}</span>` : ''}
+      <span class="ig-cap">${esc(m.caption.slice(0, 140))}</span></a>`).join('')}</div><p class="ig-foot">${follow}</p>`;
+    return;
+  }
+  const manual = lines(s.ig_posts).filter((u) => /^https:\/\/(www\.)?instagram\.com\/(p|reel|tv)\//.test(u)).slice(0, 6);
+  if (manual.length) {
+    box.innerHTML = `<div class="ig-embeds">${manual.map((u) => `<blockquote class="instagram-media" data-instgrm-permalink="${esc(u.split('?')[0])}" data-instgrm-version="14"><a href="${esc(u)}" target="_blank" rel="noopener">Lihat postingan di Instagram</a></blockquote>`).join('')}</div><p class="ig-foot">${follow}</p>`;
+    if (window.instgrm) window.instgrm.Embeds.process();
+    else { const sc = document.createElement('script'); sc.async = true; sc.src = 'https://www.instagram.com/embed.js'; document.body.appendChild(sc); }
+    return;
+  }
+  box.innerHTML = `<div class="social-cta ig">${icon('instagram')}<div><b>Ikuti kegiatan terbaru kami</b><span>Instagram @${esc(handle)}</span></div>${follow}</div>`;
+}
 
 // ---------- Beranda ----------
 PAGES.home = async (main) => {
@@ -333,15 +391,25 @@ PAGES.home = async (main) => {
     <div class="news-grid" id="homeNews">${'<div class="skel" style="height:320px"></div>'.repeat(3)}</div>
   </div></section>
 
+  ${s.show_youtube !== '0' && s.youtube ? `<section class="section dark yt-sec"><div class="wrap">
+    ${secHead('06', 'SMKN 8 TV', 'Video Terbaru', `Otomatis dari kanal YouTube ${ytName(s)}.`, `<a class="link-arrow" href="${esc(ytUrl(s.youtube))}" target="_blank" rel="noopener">Kunjungi kanal ${icon('arrowUR')}</a>`)}
+    <div id="homeYT"><div class="skel" style="height:360px;opacity:.15"></div></div>
+  </div></section>` : ''}
+
+  ${s.show_instagram !== '0' && s.instagram ? `<section class="section alt"><div class="wrap">
+    ${secHead('07', 'Instagram', '@' + esc(s.instagram), 'Momen terbaru dari akun Instagram resmi sekolah.')}
+    <div id="homeIG"></div>
+  </div></section>` : ''}
+
   <section class="section dark"><div class="wrap">
-    ${secHead('06', 'Karier & Sertifikasi', 'Siap kerja,<br>tersertifikasi', 'Bursa Kerja Khusus menghubungkan lulusan dengan industri, LSP P1 memastikan kompetensinya diakui.')}
+    ${secHead('08', 'Karier & Sertifikasi', 'Siap kerja,<br>tersertifikasi', 'Bursa Kerja Khusus menghubungkan lulusan dengan industri, LSP P1 memastikan kompetensinya diakui.')}
     <div class="duo" id="homeDuo"></div>
   </div></section>
 
   <section class="section alt"><div class="wrap">
     <div class="duo" style="grid-template-columns:1fr 1fr;align-items:start">
-      <div>${secHead('07', 'Agenda', 'Agenda Terdekat', '', `<a class="link-arrow" href="/agenda">Semua agenda ${icon('arrow')}</a>`)}<div class="agenda-list" id="homeAgenda"></div></div>
-      <div>${secHead('08', 'Galeri', 'Potret Kegiatan', '', `<a class="link-arrow" href="/galeri">Galeri ${icon('arrow')}</a>`)}<div class="gal-strip" id="homeGal" style="grid-template-columns:repeat(3,1fr)"></div></div>
+      <div>${secHead('09', 'Agenda', 'Agenda Terdekat', '', `<a class="link-arrow" href="/agenda">Semua agenda ${icon('arrow')}</a>`)}<div class="agenda-list" id="homeAgenda"></div></div>
+      <div>${secHead('10', 'Galeri', 'Potret Kegiatan', '', `<a class="link-arrow" href="/galeri">Galeri ${icon('arrow')}</a>`)}<div class="gal-strip" id="homeGal" style="grid-template-columns:repeat(3,1fr)"></div></div>
     </div>
   </div></section>
 
@@ -353,6 +421,8 @@ PAGES.home = async (main) => {
     </div>
   </div></section>`;
 
+  if ($('#homeYT')) renderYouTube($('#homeYT'));
+  if ($('#homeIG')) renderInstagram($('#homeIG'));
   const [news, agenda, gal, low, sk] = await Promise.all([
     api('posts?limit=6'), api('agenda?upcoming=1&limit=4'), api('gallery?limit=6'), api('lowongan?status=buka&limit=4'), api('skema'),
   ]).catch(() => [{ items: [] }, { items: [] }, { items: [] }, { items: [] }, { items: [] }]);
@@ -604,11 +674,18 @@ PAGES.galeri = async (main) => {
   setTitle('Galeri');
   let unit = params.get('unit') || '', page = 1;
   const units = [SCHOOL_UNIT, ...Object.values(UNITS)];
-  main.innerHTML = `${pageHero('Galeri', 'Potret kegiatan, praktik, dan karya warga SMKN 8 Surabaya.', ['Galeri'])}
+  const sset = SITE.settings;
+  main.innerHTML = `${pageHero('Galeri', 'Foto dan video kegiatan, praktik, dan karya warga SMKN 8 Surabaya.', ['Galeri'])}
+  ${sset.show_youtube !== '0' && sset.youtube ? `<section class="section dark yt-sec" style="padding:48px 0"><div class="wrap">
+    <div class="sec-head" style="margin-bottom:24px"><div><div class="sec-label mono"><b>▶</b>YouTube</div><h2 class="sec-title" style="font-size:2rem">Video Terbaru</h2></div>
+    <a class="link-arrow" href="${esc(ytUrl(sset.youtube))}" target="_blank" rel="noopener">${esc(ytName(sset))} ${icon('arrowUR')}</a></div>
+    <div id="galYT"></div></div></section>` : ''}
   <section class="section" style="padding-top:48px"><div class="wrap">
+    <h2 class="sec-title" style="font-size:2rem;margin-bottom:20px">Foto Kegiatan</h2>
     <div class="filters" id="fUnit"></div><div class="gal-grid" id="gal"></div>
     <div class="pager"><button class="btn btn-line" id="more" hidden>Muat lebih banyak</button></div>
   </div></section>`;
+  if ($('#galYT')) renderYouTube($('#galYT'), { limit: 8, layout: 'grid' });
   $('#fUnit').innerHTML = [['', 'Semua', '#0d1a2e'], ...units.map((u) => [u.slug, chipLabel(u), u.color])].map(([v, l, c]) => `<button class="chip-btn${v === unit ? ' on' : ''}" data-v="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)}</button>`).join('');
   const load = async (append) => {
     const d = await api(`gallery?limit=24&page=${page}${unit ? '&unit=' + unit : ''}`);
@@ -629,8 +706,9 @@ PAGES.kontak = async (main) => {
     s.email && ['mail', 'Email', `<a href="mailto:${esc(s.email)}">${esc(s.email)}</a>`],
     s.phone && ['phone', 'Telepon', `<a href="tel:${esc(s.phone)}">${esc(s.phone)}</a>`],
     s.whatsapp && ['wa', 'WhatsApp', `<a href="${waLink(s.whatsapp)}" target="_blank" rel="noopener">${esc(s.whatsapp)}</a>`],
-    s.instagram && ['instagram', 'Instagram & Facebook', `<a href="https://instagram.com/${esc(s.instagram)}" target="_blank" rel="noopener">@${esc(s.instagram)}</a>`],
-    s.youtube && ['youtube', 'YouTube', `<a href="https://youtube.com/@${esc(s.youtube)}" target="_blank" rel="noopener">${esc(s.youtube)}</a>`],
+    s.instagram && ['instagram', 'Instagram', `<a href="https://instagram.com/${esc(s.instagram)}" target="_blank" rel="noopener">@${esc(s.instagram)}</a>`],
+    s.facebook && ['facebook', 'Facebook', `<a href="https://facebook.com/${esc(s.facebook)}" target="_blank" rel="noopener">@${esc(s.facebook)}</a>`],
+    s.youtube && ['youtube', 'YouTube', `<a href="${esc(ytUrl(s.youtube))}" target="_blank" rel="noopener">${esc(ytName(s))}</a>`],
   ].filter(Boolean);
   main.innerHTML = `${pageHero('Hubungi Kami', 'Ada pertanyaan seputar sekolah, program keahlian, sertifikasi, atau kerja sama industri? Kirim pesan kepada kami.', ['Kontak'])}
   <section class="section" style="padding-top:48px"><div class="wrap contact-grid">

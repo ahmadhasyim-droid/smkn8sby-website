@@ -8,6 +8,87 @@ import { SCHEMA_VERSION, TABLES, DEFAULT_SETTINGS, DEFAULT_UNITS, MIGRATIONS } f
 const SESSION_DAYS = 7;
 const MAX_MEDIA_BYTES = 1_900_000;
 const ROLES = ['admin', 'unit'];
+const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed'];
+const FEED_TTL = 60 * 60 * 1000; // feed YouTube/Instagram diperbarui tiap 1 jam
+
+// ---------------- feed YouTube & Instagram ----------------
+async function cacheGet(db, key) { return db.prepare(`SELECT value, updated_at FROM cache WHERE key=?`).bind(key).first(); }
+async function cachePut(db, key, value) {
+  await db.prepare(`INSERT OR REPLACE INTO cache(key,value,updated_at) VALUES(?,?,?)`).bind(key, JSON.stringify(value), Date.now()).run();
+}
+// Ambil dari cache bila masih baru; bila tidak, ambil ulang. Jika gagal, pakai data lama.
+async function cachedFeed(db, key, loader) {
+  const c = await cacheGet(db, key);
+  if (c && Date.now() - c.updated_at < FEED_TTL) return JSON.parse(c.value);
+  try { const fresh = await loader(); await cachePut(db, key, fresh); return fresh; }
+  catch (e) { console.error(key, e); if (c) return JSON.parse(c.value); throw e; }
+}
+const xmlText = (s) => String(s || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+function channelIdFrom(v) { const m = String(v || '').match(/(UC[\w-]{22})/); return m ? m[1] : ''; }
+async function loadYouTube(channelId) {
+  const r = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`, { headers: { 'User-Agent': 'Mozilla/5.0 (SMKN8SBY website)' } });
+  if (!r.ok) throw new Error('YouTube feed ' + r.status);
+  const xml = await r.text();
+  const items = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(([, e]) => {
+    const g = (re) => (e.match(re) || [])[1] || '';
+    const id = g(/<yt:videoId>([^<]+)<\/yt:videoId>/);
+    return {
+      id, title: xmlText(g(/<title>([\s\S]*?)<\/title>/)), published: g(/<published>([^<]+)<\/published>/),
+      thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, url: xmlText(g(/<link rel="alternate" href="([^"]+)"/)) || `https://www.youtube.com/watch?v=${id}`,
+      short: /\/shorts\//.test(g(/<link rel="alternate" href="([^"]+)"/)), views: +g(/<media:statistics views="(\d+)"/) || 0,
+    };
+  }).filter((v) => v.id);
+  return { channel: xmlText((xml.match(/<title>([\s\S]*?)<\/title>/) || [])[1]), items };
+}
+async function loadInstagram(db) {
+  const tok = await db.prepare(`SELECT value FROM settings WHERE key='ig_token'`).first('value');
+  if (!tok) {
+    // Alternatif tanpa token: URL feed JSON dari layanan seperti Behold.so
+    const feedUrl = await db.prepare(`SELECT value FROM settings WHERE key='ig_feed_url'`).first('value');
+    if (!feedUrl || !/^https:\/\//i.test(feedUrl)) return { items: [], configured: false };
+    const r = await fetch(feedUrl, { headers: { Accept: 'application/json' } });
+    if (!r.ok) throw new Error('Feed IG ' + r.status);
+    const d = await r.json();
+    const posts = Array.isArray(d) ? d : d.posts || d.data || d.items || [];
+    return {
+      configured: true, username: d.username || '',
+      items: posts.map((m) => {
+        const type = String(m.mediaType || m.media_type || '').toUpperCase();
+        const sz = m.sizes || {};
+        const pick = (o) => (o && (o.mediaUrl || o.url)) || '';
+        const image = pick(sz.medium) || pick(sz.large) || (type === 'VIDEO' ? m.thumbnailUrl || m.thumbnail_url : '') || m.mediaUrl || m.media_url || m.thumbnailUrl || '';
+        return { id: m.id, permalink: m.permalink, type, timestamp: m.timestamp, caption: String(m.caption || m.prunedCaption || '').slice(0, 300), image };
+      }).filter((m) => m.image && /^https:\/\//.test(m.image) && m.permalink).slice(0, 12),
+    };
+  }
+  // Perpanjang token otomatis (token berlaku 60 hari; diperbarui tiap ±7 hari)
+  const last = +(await db.prepare(`SELECT value FROM settings WHERE key='ig_token_refreshed'`).first('value') || 0);
+  let token = tok;
+  if (Date.now() - last > 7 * 86400e3) {
+    try {
+      const rr = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(tok)}`);
+      const rj = await rr.json();
+      if (rj.access_token) token = rj.access_token;
+      await db.batch([
+        db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('ig_token',?)`).bind(token),
+        db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('ig_token_refreshed',?)`).bind(String(Date.now())),
+      ]);
+    } catch (e) { console.error('ig refresh', e); }
+  }
+  const r = await fetch(`https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=12&access_token=${encodeURIComponent(token)}`);
+  const d = await r.json();
+  if (!r.ok || d.error) throw new Error('Instagram: ' + (d.error?.message || r.status));
+  return {
+    configured: true,
+    items: (d.data || []).map((m) => ({
+      id: m.id, permalink: m.permalink, type: m.media_type, timestamp: m.timestamp,
+      caption: String(m.caption || '').slice(0, 300),
+      image: m.media_type === 'VIDEO' ? m.thumbnail_url : m.media_url,
+    })).filter((m) => m.image && m.permalink),
+  };
+}
+const IG_IMG_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net)$/i;
 
 // ---------------- util ----------------
 const json = (data, status = 200, headers = {}) =>
@@ -65,7 +146,7 @@ async function ensureSchema(db) {
     VALUES(1,'selamat-datang-di-website-baru-smkn-8-surabaya',?,?,?,'pengumuman','sekolah','publish',1,'Admin',?,?,?)`).bind(
     'Selamat Datang di Website Baru SMKN 8 Surabaya',
     'Website resmi SMK Negeri 8 Surabaya kini hadir dengan halaman khusus untuk setiap program keahlian, LSP, dan Bursa Kerja Khusus.',
-    '<p>Website resmi SMK Negeri 8 Surabaya kini hadir dengan tampilan baru. Setiap program keahlian — Kecantikan, Perhotelan, Kuliner/Tata Boga, Desain Komunikasi Visual (DKV), dan Tata Busana — serta Teaching Factory (TEFA) di setiap keahlian memiliki halaman sendiri yang berisi profil, kompetensi, kegiatan, agenda, dan galeri.</p><p>Selain itu, tersedia halaman <strong>LSP P1</strong> untuk informasi skema sertifikasi kompetensi, serta <strong>Bursa Kerja Khusus (BKK)</strong> untuk informasi lowongan kerja bagi lulusan.</p><p>Ikuti juga kabar terbaru kami di Instagram dan Facebook <strong>@smekdels</strong> serta kanal YouTube <strong>smkn8sbyofficial</strong>.</p>',
+    '<p>Website resmi SMK Negeri 8 Surabaya kini hadir dengan tampilan baru. Setiap program keahlian — Kecantikan, Perhotelan, Kuliner/Tata Boga, Desain Komunikasi Visual (DKV), dan Tata Busana — serta Teaching Factory (TEFA) di setiap keahlian memiliki halaman sendiri yang berisi profil, kompetensi, kegiatan, agenda, dan galeri.</p><p>Selain itu, tersedia halaman <strong>LSP P1</strong> untuk informasi skema sertifikasi kompetensi, serta <strong>Bursa Kerja Khusus (BKK)</strong> untuk informasi lowongan kerja bagi lulusan.</p><p>Ikuti juga kabar terbaru kami di Instagram <strong>@skadela_sby</strong>, Facebook <strong>@smekdels</strong>, serta kanal YouTube <strong>SMK NEGERI 8 SURABAYA OFFICIAL</strong>.</p>',
     t, t, t));
   stmts.push(db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('schema_version',?)`).bind(SCHEMA_VERSION));
   await db.batch(stmts);
@@ -204,8 +285,32 @@ export async function onRequest(ctx) {
         db.prepare(`SELECT (SELECT COUNT(*) FROM posts WHERE status='publish') posts,
           (SELECT COUNT(*) FROM lowongan WHERE status='buka') lowongan, (SELECT COUNT(*) FROM skema) skema`).first(),
       ]);
-      const settings = Object.fromEntries(s.results.filter((r) => r.key !== 'schema_version').map((r) => [r.key, r.value]));
+      const settings = Object.fromEntries(s.results.filter((r) => !PRIVATE_SETTINGS.includes(r.key)).map((r) => [r.key, r.value]));
+      settings.ig_connected = s.results.some((r) => (r.key === 'ig_token' || r.key === 'ig_feed_url') && r.value) ? '1' : '';
       return json({ settings, units: u.results, counts }, 200, { 'Cache-Control': 'public, max-age=60' });
+    }
+
+    // ===== FEED MEDIA SOSIAL =====
+    if (method === 'GET' && parts[0] === 'feeds') {
+      const hdr = { 'Cache-Control': 'public, max-age=300' };
+      if (parts[1] === 'youtube') {
+        const url = await db.prepare(`SELECT value FROM settings WHERE key='youtube'`).first('value');
+        const ch = channelIdFrom(url);
+        if (!ch) return json({ items: [], error: 'ID kanal YouTube belum diisi (gunakan link /channel/UC…).' }, 200, hdr);
+        try { return json(await cachedFeed(db, 'yt:' + ch, () => loadYouTube(ch)), 200, hdr); }
+        catch (e) { return json({ items: [], error: 'Feed YouTube belum tersedia.' }, 200, hdr); }
+      }
+      if (parts[1] === 'instagram') {
+        try { return json(await cachedFeed(db, 'ig', () => loadInstagram(db)), 200, hdr); }
+        catch (e) { return json({ items: [], configured: true, error: 'Feed Instagram belum tersedia.' }, 200, hdr); }
+      }
+      if (parts[1] === 'ig-img') { // perantara gambar Instagram (hanya dari server CDN Instagram)
+        let u; try { u = new URL(q.get('u') || ''); } catch { return err('URL tidak valid'); }
+        if (u.protocol !== 'https:' || !IG_IMG_HOST.test(u.hostname)) return err('Host tidak diizinkan', 403);
+        const r = await fetch(u.toString(), { cf: { cacheTtl: 86400, cacheEverything: true } });
+        if (!r.ok) return new Response('Not found', { status: 404 });
+        return new Response(r.body, { headers: { 'Content-Type': r.headers.get('Content-Type') || 'image/jpeg', 'Cache-Control': 'public, max-age=86400' } });
+      }
     }
 
     if (method === 'GET' && parts[0] === 'units' && parts[1]) {
@@ -405,12 +510,17 @@ export async function onRequest(ctx) {
       if (!isAdmin) return err('Khusus admin.', 403);
       if (method === 'GET') {
         const s = await db.prepare(`SELECT key,value FROM settings`).all();
-        return json({ settings: Object.fromEntries(s.results.map((r) => [r.key, r.value])) });
+        const out = Object.fromEntries(s.results.filter((r) => r.key !== 'ig_token_refreshed').map((r) => [r.key, r.value]));
+        out.ig_token = out.ig_token ? '••••••' + out.ig_token.slice(-4) : '';
+        return json({ settings: out });
       }
       if (method === 'PUT') {
         const b = await body();
+        if ('ig_token' in b && String(b.ig_token).startsWith('••••••')) delete b.ig_token; // tidak diubah
         const stmts = Object.keys(DEFAULT_SETTINGS).filter((k) => k in b)
           .map((k) => db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)`).bind(k, str(b[k], 8000)));
+        if ('ig_token' in b || 'ig_feed_url' in b) stmts.push(db.prepare(`DELETE FROM settings WHERE key='ig_token_refreshed'`), db.prepare(`DELETE FROM cache WHERE key='ig'`));
+        if ('youtube' in b) stmts.push(db.prepare(`DELETE FROM cache WHERE key LIKE 'yt:%'`));
         if (stmts.length) await db.batch(stmts);
         return json({ ok: true });
       }

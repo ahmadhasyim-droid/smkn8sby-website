@@ -130,6 +130,37 @@ Alamat awal: *Jl. Kamboja No. 18, Surabaya* — mohon dicek dan dilengkapi.
 
 Ubah file di GitHub (atau unggah ulang) → Cloudflare Pages otomatis men-deploy ulang dalam 1–2 menit. **Isi website (berita, foto, dll.) tidak hilang** karena tersimpan di database D1.
 
+## 5a. Video YouTube & feed Instagram otomatis
+
+**YouTube** — beranda (bagian *SMKN 8 TV*) dan halaman Galeri otomatis menampilkan video terbaru dari kanal
+**SMK NEGERI 8 SURABAYA OFFICIAL** (`https://www.youtube.com/channel/UCX2sYNy6UZ77yifIu7dr-TQ`).
+Tidak perlu API key. Daftar video diperbarui tiap 1 jam. Video baru diputar saat diklik, sehingga halaman tetap ringan.
+Link kanal bisa diganti di *Admin → Pengaturan Situs → Kontak & media sosial* (gunakan link berbentuk `/channel/UC…`).
+
+**Instagram** — ada 3 kemungkinan tampilan di beranda:
+1. **Feed otomatis** (12 postingan terbaru, diperbarui tiap jam) — pilih salah satu sumber:
+   - **Cara mudah — Behold.so:** daftar di behold.so → *Connect Instagram* (login @skadela_sby) → buat feed tipe **JSON** →
+     salin URL feed (`https://feeds.behold.so/…`) → tempel di *Admin → Pengaturan Situs → URL feed Instagram (JSON)* → Simpan.
+   - **Tanpa layanan pihak ketiga — access token Meta** (langkah di bawah).
+2. **Postingan pilihan** — bila token belum ada, tempel link postingan IG (satu per baris) di
+   *Admin → Pengaturan Situs → Video & Instagram otomatis*.
+3. Bila keduanya kosong, tampil tombol **Ikuti @skadela_sby**.
+
+### Cara mendapatkan token Instagram (sekali saja)
+> Tampilan situs Meta sering berubah; nama menu bisa sedikit berbeda.
+1. Pastikan akun **@skadela_sby** adalah akun **Profesional** (Bisnis/Kreator):
+   aplikasi Instagram → Pengaturan → *Jenis akun dan alat* → *Beralih ke akun profesional*.
+2. Buka **developers.facebook.com** → login → **My Apps → Create App**.
+   Pilih use case **Instagram** (mis. *Manage messaging & content on Instagram*), beri nama aplikasi mis. "Website SMKN 8".
+3. Di dasbor aplikasi: **Instagram → API setup with Instagram login** → bagian **Generate access tokens** → **Add account** → login sebagai @skadela_sby → izinkan.
+   - Bila diminta, tambahkan @skadela_sby sebagai **Instagram Tester** di *App roles*, lalu terima undangannya di aplikasi Instagram
+     (Pengaturan → *Aplikasi dan situs web* → *Undangan penguji*).
+4. Klik **Generate token**, salin token yang muncul.
+5. Tempel di **Admin → Pengaturan Situs → Instagram access token** → **Simpan**.
+
+Token berlaku 60 hari dan **diperpanjang otomatis** oleh website setiap ±7 hari selama website dikunjungi.
+Token tersimpan di database dan tidak pernah dikirim ke pengunjung. Bila feed berhenti (mis. token kedaluwarsa), ulangi langkah 4–5.
+
 ## 6. Catatan teknis
 
 - **Pembaruan versi:** bila website versi lama (dengan jurusan *Multimedia*) sudah terlanjur dipasang, cukup unggah kode baru ke GitHub. Database otomatis diperbarui: Multimedia berganti menjadi DKV beserta berita, agenda, galeri, akun, skema, dan lowongannya, serta 5 TEFA ditambahkan. Tidak ada data yang hilang.
@@ -159,4 +190,4 @@ npm run dev                            # buka http://localhost:8788
 ```
 
 ---
-Media sosial: Instagram & Facebook **@smekdels** · YouTube **smkn8sbyofficial** · Email **admin@smkn8-sby.sch.id**
+Media sosial: Instagram **@skadela_sby** · Facebook **@smekdels** · YouTube **[SMK NEGERI 8 SURABAYA OFFICIAL](https://www.youtube.com/channel/UCX2sYNy6UZ77yifIu7dr-TQ)** · Email **email@smkn8-sby.sch.id**
