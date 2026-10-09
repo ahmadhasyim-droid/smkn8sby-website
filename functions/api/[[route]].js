@@ -42,9 +42,18 @@ async function resolveChannelId(db, v) {
 }
 function channelIdFrom(v) { const m = String(v || '').match(/(UC[\w-]{22})/); return m ? m[1] : ''; }
 async function loadYouTube(channelId) {
-  const r = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`, { headers: { 'User-Agent': 'Mozilla/5.0 (SMKN8SBY website)' } });
-  if (!r.ok) throw new Error('YouTube feed ' + r.status);
-  const xml = await r.text();
+  // Coba feed kanal, lalu feed playlist "Uploads" (UU…) sebagai cadangan
+  const urls = [`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`, `https://www.youtube.com/feeds/videos.xml?playlist_id=UU${channelId.slice(2)}`];
+  let xml = '', lastErr = '';
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36', 'Accept-Language': 'id,en;q=0.8' } });
+      const t = r.ok ? await r.text() : '';
+      if (t.includes('<entry>')) { xml = t; break; }
+      lastErr = 'status ' + r.status;
+    } catch (e) { lastErr = e.message; }
+  }
+  if (!xml) throw new Error('YouTube feed ' + lastErr);
   const items = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(([, e]) => {
     const g = (re) => (e.match(re) || [])[1] || '';
     const id = g(/<yt:videoId>([^<]+)<\/yt:videoId>/);
@@ -312,8 +321,8 @@ export async function onRequest(ctx) {
         const url = await db.prepare(`SELECT value FROM settings WHERE key='youtube'`).first('value');
         const ch = await resolveChannelId(db, url).catch(() => '');
         if (!ch) return json({ items: [], error: 'Kanal YouTube tidak ditemukan. Isi dengan link https://www.youtube.com/channel/UC…' }, 200, hdr);
-        try { return json(await cachedFeed(db, 'yt:' + ch, () => loadYouTube(ch)), 200, hdr); }
-        catch (e) { return json({ items: [], error: 'Feed YouTube belum tersedia.' }, 200, hdr); }
+        try { return json({ channelId: ch, ...(await cachedFeed(db, 'yt:' + ch, () => loadYouTube(ch))) }, 200, hdr); }
+        catch (e) { return json({ channelId: ch, items: [], error: 'Feed YouTube belum tersedia: ' + e.message }, 200, hdr); }
       }
       if (parts[1] === 'instagram') {
         try { return json(await cachedFeed(db, 'ig', () => loadInstagram(db)), 200, hdr); }

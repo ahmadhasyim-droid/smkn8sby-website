@@ -272,6 +272,14 @@ async function renderYouTube(box, { limit = 5, layout = 'feature' } = {}) {
   const s = SITE.settings;
   const d = await api('feeds/youtube').catch(() => ({ items: [] }));
   const items = (d.items || []).slice(0, limit);
+  if (!items.length && d.channelId) {
+    // Cadangan: pemutar playlist "Uploads" resmi YouTube — selalu berisi video terbaru kanal
+    const list = 'UU' + d.channelId.slice(2);
+    box.innerHTML = `<div class="yt-frame yt-playlist"><iframe src="https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(list)}&rel=0" title="Video terbaru ${esc(ytName(s))}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
+      <p class="yt-meta" style="margin-top:12px">Daftar putar video terbaru · klik ikon daftar di pojok kanan atas pemutar untuk memilih video lain.</p>`;
+    if (layout === 'grid') box.querySelector('.yt-frame').style.maxWidth = '900px';
+    return;
+  }
   if (!items.length) {
     box.innerHTML = `<div class="social-cta">${icon('youtube')}<div><b>Tonton video kegiatan kami</b><span>Kanal YouTube ${esc(ytName(s))}</span></div><a class="btn btn-orange" href="${esc(ytUrl(s.youtube))}" target="_blank" rel="noopener">Buka YouTube ${icon('arrowUR')}</a></div>`;
     return;
