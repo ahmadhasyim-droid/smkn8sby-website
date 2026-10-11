@@ -161,6 +161,17 @@ Link kanal bisa diganti di *Admin → Pengaturan Situs → Kontak & media sosial
 Token berlaku 60 hari dan **diperpanjang otomatis** oleh website setiap ±7 hari selama website dikunjungi.
 Token tersimpan di database dan tidak pernah dikirim ke pengunjung. Bila feed berhenti (mis. token kedaluwarsa), ulangi langkah 4–5.
 
+## 5b. Video profil, Perpustakaan & DUDI
+
+- **Video profil sekolah** tampil di halaman *Profil Sekolah* (ubah di *Admin → Pengaturan Situs → Profil*).
+- **Video profil jurusan** tampil di atas profil tiap jurusan (ubah di *Admin → Profil Jurusan, Lembaga & TEFA* → kolom *Link video profil YouTube*).
+- **Perpustakaan** (`/perpustakaan`): video profil, deskripsi, dan tombol menuju perpustakaan digital
+  (`perpustakaan.smkn8-sby.sch.id`). Atur di *Admin → Pengaturan Situs → Perpustakaan*.
+- **DUDI / Mitra Industri** (`/dudi`): daftar industri mitra per jurusan, bisa dicari & difilter, dengan tautan peta.
+  Data awal (130 entri) diambil dari data penempatan PKL/magang 2026–2027 — **hanya nama & alamat industri, tanpa data siswa**.
+  Kelola di menu *Admin → DUDI / Mitra Industri*: admin & BKK untuk semua jurusan; pengelola jurusan untuk DUDI jurusannya sendiri.
+  Halaman tiap jurusan juga menampilkan bagian *Mitra Industri (DUDI)*.
+
 ## 6. Catatan teknis
 
 - **Pembaruan versi:** bila website versi lama (dengan jurusan *Multimedia*) sudah terlanjur dipasang, cukup unggah kode baru ke GitHub. Database otomatis diperbarui: Multimedia berganti menjadi DKV beserta berita, agenda, galeri, akun, skema, dan lowongannya, serta 5 TEFA ditambahkan. Tidak ada data yang hilang.
@@ -179,6 +190,7 @@ public/            → halaman website (HTML, CSS, JS, logo)
   _redirects       → alamat cantik /jurusan/..., /lembaga/..., /tefa/..., /berita/...
 functions/api/     → API (backend) yang berjalan di Cloudflare
 lib/schema.js      → struktur database + data awal 5 jurusan, 2 lembaga, 5 TEFA
+lib/dudi-seed.js   → data awal DUDI (nama & alamat industri)
 wrangler.toml      → konfigurasi Cloudflare (isi Database ID di sini)
 ```
 

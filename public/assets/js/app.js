@@ -38,6 +38,9 @@ const ICONS = {
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
   news: '<path d="M4 5h13v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v10a2 2 0 0 1-2 2"/><path d="M8 9h5M8 13h5M8 17h3"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M9 7h7M9 11h5"/>',
+  handshake: '<path d="M11 17l2 2a1.4 1.4 0 0 0 2-2"/><path d="M14 14l2.5 2.5a1.4 1.4 0 0 0 2-2L15 11l-1.5 1.5a2 2 0 0 1-3-3L13 7l-1-1-4 4"/><path d="M2 11l4-4 3 1M22 11l-4-4h-3"/><path d="M6 13l3 3"/>',
+  play: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
 };
 const ICON_ALIAS = { 'tata-busana': 'busana' };
@@ -147,6 +150,7 @@ function renderShell() {
   const jur = units.filter((u) => u.type === 'jurusan'), lem = units.filter((u) => u.type === 'lembaga'), tefa = units.filter((u) => u.type === 'tefa');
   const ddItem = (u) => `<a class="dd-item" href="${unitUrl(u)}"><span class="chip" style="--c:${u.color}">${u.logo ? `<img src="${esc(u.logo)}" alt="">` : icon(u.icon || u.slug)}</span><span><b>${esc(u.name)}</b><small>${esc(u.tagline || '')}</small></span></a>`;
   const act = (p) => (page === p ? ' class="active"' : '');
+  const ddLink = (href, t, sub, ic, c) => `<a class="dd-item" href="${href}"><span class="chip" style="--c:${c}">${icon(ic)}</span><span><b>${esc(t)}</b><small>${esc(sub)}</small></span></a>`;
 
   $('#site-header').innerHTML = `
   <div class="topbar"><div class="wrap">
@@ -164,13 +168,22 @@ function renderShell() {
     <nav class="nav" id="nav" aria-label="Menu utama">
       <button class="nav-toggle nav-close" aria-label="Tutup menu">${icon('x')}</button>
       <a href="/"${act('home')}>Beranda</a>
-      <a href="/profil"${act('profil')}>Profil</a>
+      <div class="dd"><button aria-haspopup="true"${['profil', 'perpustakaan'].includes(page) ? ' class="active"' : ''}>Profil ${icon('chev')}</button><div class="dd-panel">
+        ${ddLink('/profil', 'Profil Sekolah', 'Sambutan, sejarah, visi & misi', 'sekolah', '#235ba4')}
+        ${s.profile_video ? ddLink('/profil#video', 'Video Profil', 'Kenali SMKN 8 Surabaya lewat video', 'play', '#f26836') : ''}
+        ${ddLink('/perpustakaan', 'Perpustakaan', 'Profil & layanan perpustakaan', 'book', '#16966a')}
+        ${ddLink('/dudi', 'DUDI / Mitra Industri', 'Industri yang bekerja sama', 'handshake', '#7c4bc4')}
+      </div></div>
       <div class="dd"><button aria-haspopup="true">Program Keahlian ${icon('chev')}</button><div class="dd-panel">${jur.map(ddItem).join('')}</div></div>
       <div class="dd"><button aria-haspopup="true">Lembaga ${icon('chev')}</button><div class="dd-panel">${lem.map(ddItem).join('')}</div></div>
       ${tefa.length ? `<div class="dd"><button aria-haspopup="true">TEFA ${icon('chev')}</button><div class="dd-panel">${tefa.map(ddItem).join('')}</div></div>` : ''}
-      <a href="/berita"${act('berita')}>Berita</a>
-      <a href="/agenda"${act('agenda')}>Agenda</a>
-      <a href="/galeri"${act('galeri')}>Galeri</a>
+      <a href="/dudi"${act('dudi')}>DUDI</a>
+      <a href="/perpustakaan"${act('perpustakaan')}>Perpustakaan</a>
+      <div class="dd"><button aria-haspopup="true"${['berita', 'artikel', 'agenda', 'galeri'].includes(page) ? ' class="active"' : ''}>Informasi ${icon('chev')}</button><div class="dd-panel">
+        ${ddLink('/berita', 'Berita & Kegiatan', 'Kabar terbaru sekolah & unit', 'news', '#235ba4')}
+        ${ddLink('/agenda', 'Agenda', 'Jadwal kegiatan', 'calendar', '#16966a')}
+        ${ddLink('/galeri', 'Galeri', 'Foto & video kegiatan', 'image', '#d6457e')}
+      </div></div>
       <a href="/kontak"${act('kontak')}>Kontak</a>
     </nav>
     <button class="nav-toggle" id="navOpen" aria-label="Buka menu">${icon('menu')}</button>
@@ -204,7 +217,7 @@ function renderShell() {
         ${s.spmb_link ? `<li><a href="${esc(safeUrl(s.spmb_link))}" target="_blank" rel="noopener">Info SPMB / PPDB</a></li>` : ''}</ul></div>
       ${tefa.length ? `<div><h4>Teaching Factory</h4><ul>${tefa.map((u) => `<li><a href="${unitUrl(u)}">${esc(u.name)}</a></li>`).join('')}</ul></div>` : ''}
       <div><h4>Jelajahi</h4><ul>
-        <li><a href="/profil">Profil Sekolah</a></li><li><a href="/berita">Berita & Kegiatan</a></li>
+        <li><a href="/profil">Profil Sekolah</a></li><li><a href="/dudi">DUDI / Mitra Industri</a></li><li><a href="/perpustakaan">Perpustakaan</a></li><li><a href="/berita">Berita & Kegiatan</a></li>
         <li><a href="/agenda">Agenda</a></li><li><a href="/galeri">Galeri</a></li><li><a href="/kontak">Kontak</a></li>
         <li><a href="/admin/">Login Pengelola</a></li></ul></div>
     </div>
@@ -254,6 +267,9 @@ function skyline() {
 const PAGES = {};
 
 // ---------- Video YouTube & Instagram (otomatis) ----------
+const ytId = (u) => (String(u || '').match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([\w-]{11})/) || [])[1] || '';
+// Pemutar ringan: thumbnail dulu, video dimuat saat diklik
+const ytLite = (u, title = 'Video') => { const id = ytId(u); return id ? `<button class="yt-frame" data-yt="${id}" aria-label="Putar: ${esc(title)}">${ytThumb({ id, thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` })}</button>` : ''; };
 const relTime = (iso) => fmtDate(iso, { day: 'numeric', month: 'short', year: 'numeric' });
 const ytThumb = (v) => `<span class="yt-thumb"><img src="${esc(v.thumb)}" alt="" loading="lazy"><span class="yt-play" aria-hidden="true"><svg viewBox="0 0 68 48"><path d="M66.5 7.7A8.5 8.5 0 0 0 60.5 1.7C55.2.3 34 .3 34 .3S12.8.3 7.5 1.7a8.5 8.5 0 0 0-6 6C.1 13 .1 24 .1 24s0 11 1.4 16.3a8.5 8.5 0 0 0 6 6c5.3 1.4 26.5 1.4 26.5 1.4s21.2 0 26.5-1.4a8.5 8.5 0 0 0 6-6C67.9 35 67.9 24 67.9 24s0-11-1.4-16.3z" fill="#f00"/><path d="M45 24L27 14v20z" fill="#fff"/></svg></span>${v.short ? '<span class="yt-badge">Shorts</span>' : ''}</span>`;
 const ytEmbed = (id) => `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0" title="Video YouTube" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`;
@@ -327,7 +343,7 @@ PAGES.home = async (main) => {
   const ticker = [s.running_text, ...jur.map((u) => u.name), ...lem.map((u) => u.short), ...tefa.map((u) => u.name)].filter(Boolean);
   const stats = [
     [jur.length, 'Program keahlian'], [tefa.length || '', 'Teaching Factory'], ['P1', 'Lembaga Sertifikasi Profesi'], ['BKK', 'Layanan bursa kerja khusus'],
-    [s.stat_siswa, 'Peserta didik'], [s.stat_guru, 'Guru & tenaga kependidikan'], [s.stat_mitra, 'Mitra industri'], [s.stat_alumni, 'Lulusan terserap kerja'],
+    [s.stat_siswa, 'Peserta didik'], [s.stat_guru, 'Guru & tenaga kependidikan'], [s.stat_mitra || SITE.counts.dudi || '', 'Mitra industri (DUDI)'], [s.stat_alumni, 'Lulusan terserap kerja'],
   ].filter(([v]) => v !== '' && v != null);
 
   main.innerHTML = `
@@ -455,6 +471,10 @@ PAGES.profil = async (main) => {
   const units = Object.values(UNITS);
   const ident = [['Nama sekolah', s.school_name], ['NPSN', s.npsn], ['Akreditasi', s.akreditasi], ['Alamat', s.address], ['Email', s.email], ['Telepon', s.phone]].filter(([, v]) => v);
   main.innerHTML = `${pageHero('Profil Sekolah', s.tagline, ['Profil'])}
+  ${ytId(s.profile_video) ? `<section class="section dark yt-sec" id="video" style="padding:56px 0"><div class="wrap">
+    ${secHead('▶', 'Video Profil', 'Mengenal SMKN 8 Surabaya')}
+    <div class="video-feature">${ytLite(s.profile_video, 'Video profil ' + s.school_name)}</div>
+  </div></section>` : ''}
   <section class="section alt"><div class="wrap greet">
     <div class="greet-photo">${s.principal_photo ? `<img src="${esc(s.principal_photo)}" alt="${esc(s.principal_name)}">` : `<div class="ph"><img src="/assets/img/emblem-smkn8.png" alt=""></div>`}</div>
     <div>${secHead('01', 'Sambutan', 'Sambutan Kepala Sekolah')}
@@ -487,7 +507,7 @@ PAGES.unit = async (main) => {
   const parent = isTefa ? UNITS[unit.parent] : null;
   const myTefa = isJur ? Object.values(UNITS).find((u) => u.type === 'tefa' && u.parent === slug) : null;
   const tabs = [['profil', 'Profil'], [isLSP ? 'skema' : isBKK ? 'lowongan' : isTefa ? 'layanan' : 'kompetensi', isLSP ? 'Skema Sertifikasi' : isBKK ? 'Lowongan Kerja' : isTefa ? 'Produk & Layanan' : 'Kompetensi'],
-    ['kegiatan', 'Kegiatan'], ['agenda', 'Agenda'], ['galeri', 'Galeri']];
+    ...(isJur ? [['dudi', 'Mitra DUDI']] : []), ['kegiatan', 'Kegiatan'], ['agenda', 'Agenda'], ['galeri', 'Galeri']];
   const others = Object.values(UNITS).filter((u) => u.slug !== slug);
   const komp = lines(unit.kompetensi), prospek = lines(unit.prospek);
 
@@ -503,7 +523,9 @@ PAGES.unit = async (main) => {
   <nav class="subnav"><div class="wrap">${tabs.map(([id, l]) => `<a href="#${id}">${l}</a>`).join('')}</div></nav>
   <section class="section" style="padding-top:48px"><div class="wrap unit-layout">
     <div>
-      <div class="unit-block" id="profil"><h2>Profil</h2><div class="prose"><p>${esc(unit.description || 'Profil belum diisi.')}</p></div>
+      <div class="unit-block" id="profil"><h2>Profil</h2>
+        ${ytId(unit.video) ? `<div class="unit-video">${ytLite(unit.video, 'Video profil ' + unit.name)}<span class="mono">▶ Video profil ${esc(unit.name)}</span></div>` : ''}
+        <div class="prose"><p>${esc(unit.description || 'Profil belum diisi.')}</p></div>
         ${unit.visi || unit.misi ? `<div class="vm" style="margin-top:20px">${unit.visi ? `<div><h4>Visi</h4><p style="margin:0">${esc(unit.visi)}</p></div>` : ''}${unit.misi ? `<div><h4>Misi</h4><ol>${lines(unit.misi).map((m) => `<li>${esc(m)}</li>`).join('')}</ol></div>` : ''}</div>` : ''}
       </div>
       ${isBKK ? `<div class="unit-block" id="lowongan"><h2>Lowongan Kerja</h2><div class="filters" id="jobFilter"></div><div id="jobs"></div></div>
@@ -514,7 +536,9 @@ PAGES.unit = async (main) => {
         ${unit.phone ? `<div class="order-band"><div><b>Ingin memesan atau reservasi?</b><span>Hubungi ${esc(unit.name)} melalui WhatsApp.</span></div><a class="btn btn-orange" href="${waLink(unit.phone)}?text=${encodeURIComponent('Halo ' + unit.name + ' SMKN 8 Surabaya, saya ingin bertanya/memesan:')}" target="_blank" rel="noopener">${icon('wa')} Pesan via WhatsApp</a></div>` : ''}</div>` : ''}
       ${isJur ? `<div class="unit-block" id="kompetensi"><h2>Kompetensi yang Dipelajari</h2><div class="check-grid">${komp.map((k, i) => `<div><span class="n">${String(i + 1).padStart(2, '0')}</span>${esc(k)}</div>`).join('') || empty('Belum diisi.')}</div>
         ${prospek.length ? `<h3 class="mono" style="margin:28px 0 12px;color:var(--muted)">Prospek karier lulusan</h3><div class="pill-list">${prospek.map((p) => `<span>${esc(p)}</span>`).join('')}</div>` : ''}
-        <div id="jurLinks"></div></div>` : ''}
+        <div id="jurLinks"></div></div>
+      <div class="unit-block" id="dudi"><h2>Mitra Industri (DUDI)</h2><p class="prose" style="margin-top:-6px;color:var(--muted)">Dunia usaha & dunia industri tempat siswa ${esc(unit.name)} praktik kerja lapangan dan magang.</p>
+        <div class="dudi-grid compact" id="unitDudi"></div><p style="margin-top:16px"><a class="link-arrow" href="/dudi?jurusan=${esc(slug)}">Lihat semua DUDI ${esc(unit.short || '')} ${icon('arrow')}</a></p></div>` : ''}
       <div class="unit-block" id="kegiatan"><h2>Kegiatan & Berita</h2><div class="news-grid" style="grid-template-columns:repeat(2,1fr)" id="unitNews"></div>
         <p style="margin-top:20px"><a class="link-arrow" href="/berita?unit=${esc(slug)}">Semua berita ${esc(unit.short || unit.name)} ${icon('arrow')}</a></p></div>
       <div class="unit-block" id="agenda"><h2>Agenda</h2><div class="agenda-list" id="unitAgenda"></div></div>
@@ -561,7 +585,8 @@ PAGES.unit = async (main) => {
     $('#skemaList').innerHTML = d.items.length ? skemaTable(d.items) : empty('Daftar skema sertifikasi belum diisi.');
   }
   if (isJur) {
-    const [sk, jb] = await Promise.all([api('skema?major=' + slug), api(`lowongan?status=buka&major=${slug}&limit=5`)]);
+    const [sk, jb, dd] = await Promise.all([api('skema?major=' + slug), api(`lowongan?status=buka&major=${slug}&limit=5`), api('dudi?major=' + slug)]);
+    $('#unitDudi').innerHTML = dd.items.length ? dd.items.slice(0, 12).map((x) => dudiCard(x, true)).join('') + (dd.items.length > 12 ? `<div class="dudi-more">+${dd.items.length - 12} mitra lainnya</div>` : '') : empty('Data mitra industri belum diisi.');
     let h = '';
     if (sk.items.length) h += `<h3 class="mono" style="margin:28px 0 12px;color:var(--muted)">Skema sertifikasi LSP untuk ${esc(unit.name)}</h3>${skemaTable(sk.items, true)}`;
     if (jb.items.length) h += `<h3 class="mono" style="margin:28px 0 12px;color:var(--muted)">Lowongan BKK yang relevan</h3>${jb.items.map(jobCard).join('')}`;
@@ -751,6 +776,70 @@ function notFound(main) {
   <section class="section"><div class="wrap"><a class="btn btn-dark" href="/">Kembali ke beranda ${icon('arrow')}</a></div></section>`;
 }
 PAGES.notfound = notFound;
+
+// ---------- DUDI / Mitra Industri ----------
+const mapsLink = (x) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([x.name, x.address || 'Surabaya'].join(' '))}`;
+const initials = (n) => String(n).replace(/^(PT|CV|UD|TP|LKP)\.?\s+/i, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+function dudiCard(x, compact = false) {
+  const u = unitOf(x.major);
+  return `<div class="dudi-card" style="--c:${u.color}">
+    <span class="dudi-logo">${x.logo ? `<img src="${esc(x.logo)}" alt="">` : esc(initials(x.name) || '?')}</span>
+    <div><b>${esc(x.name)}</b>${x.field ? `<small class="dudi-field">${esc(x.field)}</small>` : ''}
+      ${!compact && x.address ? `<span class="dudi-addr">${icon('pin')}${esc(x.address)}</span>` : ''}
+      <span class="dudi-meta">${compact ? '' : unitBadge(x.major, true)}<a href="${mapsLink(x)}" target="_blank" rel="noopener">Peta ${icon('arrowUR')}</a>${x.website ? `<a href="${esc(safeUrl(x.website))}" target="_blank" rel="noopener">Website ${icon('arrowUR')}</a>` : ''}</span></div>
+  </div>`;
+}
+PAGES.dudi = async (main) => {
+  setTitle('DUDI / Mitra Industri');
+  const jur = Object.values(UNITS).filter((u) => u.type === 'jurusan');
+  let major = params.get('jurusan') || '', q = '';
+  main.innerHTML = `${pageHero('Mitra Industri (DUDI)', 'Dunia usaha dan dunia industri yang bekerja sama dengan SMK Negeri 8 Surabaya sebagai tempat praktik kerja lapangan (PKL), magang, dan rekrutmen lulusan.', ['DUDI'])}
+  <section class="section dark" style="padding:40px 0"><div class="wrap"><div class="stats" id="dudiStats"></div></div></section>
+  <section class="section" style="padding-top:40px"><div class="wrap">
+    <div class="filters" id="fMajor"></div>
+    <div class="filters" style="margin-top:-12px"><label class="search" style="margin-left:0">${icon('search')}<input id="q" type="search" placeholder="Cari nama industri atau alamat…" aria-label="Cari DUDI"></label><span id="dudiCount" class="mono" style="color:var(--muted)"></span></div>
+    <div class="dudi-grid" id="dudiList"></div>
+    <div class="cta-inline"><div><b>Ingin bermitra dengan SMKN 8 Surabaya?</b><span>Terbuka untuk kerja sama PKL, magang, kelas industri, dan rekrutmen lulusan.</span></div><a class="btn btn-orange" href="/kontak">Hubungi Kami ${icon('arrow')}</a></div>
+  </div></section>`;
+  const all = await api('dudi');
+  const per = all.perMajor || {};
+  const uniq = new Set(all.items.map((x) => x.name.toLowerCase().trim())).size;
+  $('#dudiStats').innerHTML = `<div class="stat"><b>${uniq}</b><span>Mitra industri</span></div>` + jur.map((u) => `<div class="stat"><b style="color:${u.color}">${per[u.slug] || 0}</b><span>${esc(u.name)}</span></div>`).join('');
+  $('#fMajor').innerHTML = [['', 'Semua jurusan', '#0d1a2e'], ...jur.map((u) => [u.slug, u.name, u.color])].map(([v, l, c]) => `<button class="chip-btn${v === major ? ' on' : ''}" data-v="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)}${v ? ` <small>${per[v] || 0}</small>` : ''}</button>`).join('');
+  const draw = () => {
+    const k = q.toLowerCase();
+    const items = all.items.filter((x) => (!major || x.major === major) && (!k || (x.name + ' ' + (x.address || '') + ' ' + (x.field || '')).toLowerCase().includes(k)));
+    $('#dudiCount').textContent = `${items.length} industri`;
+    $('#dudiList').innerHTML = items.length ? items.map((x) => dudiCard(x)).join('') : `<div style="grid-column:1/-1">${empty('Tidak ada industri yang cocok.')}</div>`;
+    history.replaceState(null, '', '/dudi' + (major ? '?jurusan=' + major : ''));
+  };
+  $('#fMajor').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; major = b.dataset.v; $$('#fMajor button').forEach((x) => x.classList.toggle('on', x === b)); draw(); };
+  let t; $('#q').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { q = e.target.value.trim(); draw(); }, 200); };
+  draw();
+};
+
+// ---------- Perpustakaan ----------
+PAGES.perpustakaan = async (main) => {
+  const s = SITE.settings; setTitle('Perpustakaan');
+  const url = safeUrl(s.library_url);
+  main.innerHTML = `${pageHero(s.library_name || 'Perpustakaan', 'Pusat sumber belajar warga SMK Negeri 8 Surabaya.', ['Perpustakaan'])}
+  <section class="section" style="padding-top:48px"><div class="wrap lib-layout">
+    <div>
+      ${ytId(s.library_video) ? `<div class="video-feature">${ytLite(s.library_video, 'Video profil perpustakaan')}</div><p class="mono" style="color:var(--muted);margin:10px 0 28px">▶ Video profil perpustakaan</p>` : ''}
+      <div class="unit-block" style="--unit:#16966a"><h2>Tentang Perpustakaan</h2><div class="prose"><p>${esc(s.library_desc || '')}</p></div></div>
+    </div>
+    <aside>
+      <div class="lib-card">
+        <span class="lib-ico">${icon('book')}</span>
+        <h3>Perpustakaan Digital</h3>
+        <p>Cari koleksi, pinjam buku, dan akses layanan perpustakaan secara online.</p>
+        ${url !== '#' ? `<a class="btn btn-orange" style="width:100%" href="${esc(url)}" target="_blank" rel="noopener">Buka Perpustakaan ${icon('arrowUR')}</a><small>${esc(url.replace(/^https?:\/\//, ''))}</small>` : '<small>Tautan segera tersedia.</small>'}
+      </div>
+      ${s.library_hours ? `<div class="side-card"><h4>Jam layanan</h4><p style="margin:0;white-space:pre-line">${esc(s.library_hours)}</p></div>` : ''}
+      <div class="side-card"><h4>Lokasi</h4><div class="contact-list"><div>${icon('pin')}<span>${esc(s.address)}</span></div><a href="mailto:${esc(s.email)}">${icon('mail')}${esc(s.email)}</a></div></div>
+    </aside>
+  </div></section>`;
+};
 
 // ---------- Mulai ----------
 (async () => {

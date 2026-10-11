@@ -4,11 +4,13 @@
 //  Binding database yang dibutuhkan: DB (Cloudflare D1)
 // =============================================================
 import { SCHEMA_VERSION, TABLES, DEFAULT_SETTINGS, DEFAULT_UNITS, MIGRATIONS } from '../../lib/schema.js';
+import { DUDI_SEED } from '../../lib/dudi-seed.js';
+const JURUSAN = new Set(DEFAULT_UNITS.filter((u) => u.type === 'jurusan').map((u) => u.slug));
 
 const SESSION_DAYS = 7;
 const MAX_MEDIA_BYTES = 1_900_000;
 const ROLES = ['admin', 'unit'];
-const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed'];
+const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded'];
 const FEED_TTL = 60 * 60 * 1000; // feed YouTube/Instagram diperbarui tiap 1 jam
 
 // ---------------- feed YouTube & Instagram ----------------
@@ -152,7 +154,11 @@ async function ensureSchema(db) {
     if (row && row.value === SCHEMA_VERSION) { schemaReady = true; return; }
   } catch (_) { /* tabel belum ada */ }
   await db.batch(TABLES.map((s) => db.prepare(s)));
-  for (const m of MIGRATIONS) { try { await db.prepare(m).run(); } catch (_) { /* sudah diterapkan */ } }
+  // ALTER dijalankan satu per satu (boleh gagal bila kolom sudah ada); sisanya sekaligus dalam satu batch
+  for (const m of MIGRATIONS.filter((x) => /^\s*ALTER/i.test(x))) { try { await db.prepare(m).run(); } catch (_) { /* sudah ada */ } }
+  const upd = MIGRATIONS.filter((x) => !/^\s*ALTER/i.test(x));
+  try { await db.batch(upd.map((m) => db.prepare(m))); }
+  catch (_) { for (const m of upd) { try { await db.prepare(m).run(); } catch (e) { /* abaikan */ } } }
   const dkv = DEFAULT_UNITS.find((u) => u.slug === 'dkv');
   try { // isi profil DKV menggantikan teks bawaan Multimedia (hanya bila belum diubah pengelola)
     await db.prepare(`UPDATE units SET description=?, kompetensi=?, prospek=? WHERE slug='dkv' AND description LIKE 'Program Keahlian Multimedia%'`)
@@ -165,6 +171,8 @@ async function ensureSchema(db) {
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(u.slug, u.type, u.name, u.short, u.tagline, u.color, u.icon, u.logo || '', u.description, u.kompetensi, u.prospek, u.parent || null, u.sort, now()));
     if (u.parent) stmts.push(db.prepare(`UPDATE units SET parent=? WHERE slug=? AND parent IS NULL`).bind(u.parent, u.slug));
   }
+  // video profil bawaan unit (untuk instalasi baru, setelah baris unit dibuat)
+  for (const m of MIGRATIONS.filter((x) => /^\s*UPDATE units SET video/.test(x))) stmts.push(db.prepare(m));
   const t = now();
   stmts.push(db.prepare(`INSERT OR IGNORE INTO posts(id,slug,title,excerpt,content,category,unit_slug,status,featured,author_name,published_at,created_at,updated_at)
     VALUES(1,'selamat-datang-di-website-baru-smkn-8-surabaya',?,?,?,'pengumuman','sekolah','publish',1,'Admin',?,?,?)`).bind(
@@ -172,6 +180,17 @@ async function ensureSchema(db) {
     'Website resmi SMK Negeri 8 Surabaya kini hadir dengan halaman khusus untuk setiap program keahlian, LSP, dan Bursa Kerja Khusus.',
     '<p>Website resmi SMK Negeri 8 Surabaya kini hadir dengan tampilan baru. Setiap program keahlian — Kecantikan, Perhotelan, Kuliner/Tata Boga, Desain Komunikasi Visual (DKV), dan Tata Busana — serta Teaching Factory (TEFA) di setiap keahlian memiliki halaman sendiri yang berisi profil, kompetensi, kegiatan, agenda, dan galeri.</p><p>Selain itu, tersedia halaman <strong>LSP P1</strong> untuk informasi skema sertifikasi kompetensi, serta <strong>Bursa Kerja Khusus (BKK)</strong> untuk informasi lowongan kerja bagi lulusan.</p><p>Ikuti juga kabar terbaru kami di Instagram <strong>@skadela_sby</strong>, Facebook <strong>@smekdels</strong>, serta kanal YouTube <strong>SMK NEGERI 8 SURABAYA OFFICIAL</strong>.</p>',
     t, t, t));
+  // Data awal DUDI — hanya sekali (bila admin menghapusnya kelak, tidak diisi ulang)
+  const seeded = await db.prepare(`SELECT value FROM settings WHERE key='dudi_seeded'`).first().catch(() => null);
+  if (!seeded) {
+    const t2 = now();
+    for (let i = 0; i < DUDI_SEED.length; i += 18) { // 18 baris x 5 kolom = 90 parameter per perintah
+      const chunk = DUDI_SEED.slice(i, i + 18);
+      stmts.push(db.prepare(`INSERT INTO dudi(name,address,major,sort,created_at) VALUES ${chunk.map(() => '(?,?,?,?,?)').join(',')}`)
+        .bind(...chunk.flatMap(([major, name, address], j) => [name, address, major, i + j, t2])));
+    }
+    stmts.push(db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('dudi_seeded','1')`));
+  }
   stmts.push(db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('schema_version',?)`).bind(SCHEMA_VERSION));
   await db.batch(stmts);
   schemaReady = true;
@@ -250,15 +269,24 @@ const RESOURCES = {
     fields: { code: 60, name: 200, major: 40, level: 60, units_count: 'int', description: 2000, sort: 'int' },
     required: ['name'],
   },
+  // DUDI: admin & BKK semua data; pengelola jurusan hanya DUDI jurusannya
+  dudi: {
+    table: 'dudi', scope: 'major', order: 'major, sort, name',
+    fields: { name: 200, address: 400, major: 40, field: 100, website: 300, logo: 300, description: 1000, sort: 'int' },
+    required: ['name'],
+  },
 };
+const dudiAll = (user) => user.role === 'admin' || user.unit_slug === 'bkk';
 function canUseResource(user, res) {
   if (user.role === 'admin') return true;
   if (res.scope === 'unit') return !!user.unit_slug;
+  if (res.scope === 'major') return dudiAll(user) || JURUSAN.has(user.unit_slug);
   return user.unit_slug === res.scope;
 }
 function canTouchRow(user, res, row) {
   if (user.role === 'admin') return true;
   if (res.scope === 'unit') return row.unit_slug === user.unit_slug;
+  if (res.scope === 'major') return dudiAll(user) || row.major === user.unit_slug;
   return user.unit_slug === res.scope;
 }
 function pickFields(res, body) {
@@ -307,7 +335,8 @@ export async function onRequest(ctx) {
         db.prepare(`SELECT key,value FROM settings`).all(),
         db.prepare(`SELECT slug,type,name,short,tagline,color,icon,logo,cover,parent,sort FROM units ORDER BY sort`).all(),
         db.prepare(`SELECT (SELECT COUNT(*) FROM posts WHERE status='publish') posts,
-          (SELECT COUNT(*) FROM lowongan WHERE status='buka') lowongan, (SELECT COUNT(*) FROM skema) skema`).first(),
+          (SELECT COUNT(*) FROM lowongan WHERE status='buka') lowongan, (SELECT COUNT(*) FROM skema) skema,
+          (SELECT COUNT(DISTINCT lower(trim(name))) FROM dudi) dudi`).first(),
       ]);
       const settings = Object.fromEntries(s.results.filter((r) => !PRIVATE_SETTINGS.includes(r.key)).map((r) => [r.key, r.value]));
       settings.ig_connected = s.results.some((r) => (r.key === 'ig_token' || r.key === 'ig_feed_url') && r.value) ? '1' : '';
@@ -397,6 +426,17 @@ export async function onRequest(ctx) {
       const limit = clampInt(q.get('limit'), 50, 1, 100);
       const rows = await db.prepare(`SELECT * FROM lowongan WHERE ${where.join(' AND ')} ORDER BY ${RESOURCES.lowongan.order} LIMIT ?`).bind(...args, limit).all();
       return json({ items: rows.results });
+    }
+
+    if (method === 'GET' && parts[0] === 'dudi') {
+      const where = ['1=1']; const args = [];
+      if (q.get('major')) { where.push('major=?'); args.push(q.get('major')); }
+      if (q.get('q')) { where.push('(name LIKE ? OR address LIKE ? OR field LIKE ?)'); args.push(...Array(3).fill(`%${q.get('q')}%`)); }
+      const [rows, per] = await Promise.all([
+        db.prepare(`SELECT id,name,address,major,field,website,logo,description FROM dudi WHERE ${where.join(' AND ')} ORDER BY major, sort, name LIMIT 500`).bind(...args).all(),
+        db.prepare(`SELECT major, COUNT(*) n FROM dudi GROUP BY major`).all(),
+      ]);
+      return json({ items: rows.results, perMajor: Object.fromEntries(per.results.map((r) => [r.major, r.n])) }, 200, { 'Cache-Control': 'public, max-age=60' });
     }
 
     if (method === 'GET' && parts[0] === 'skema') {
@@ -519,7 +559,7 @@ export async function onRequest(ctx) {
       if (method === 'PUT') {
         const b = await body();
         const F = { name: 120, short: 20, tagline: 250, color: 9, logo: 300, cover: 300, description: 5000, visi: 2000, misi: 4000,
-          kompetensi: 4000, prospek: 4000, head_name: 120, head_title: 120, head_photo: 300, phone: 40, email: 120, instagram: 60 };
+          kompetensi: 4000, prospek: 4000, video: 300, head_name: 120, head_title: 120, head_photo: 300, phone: 40, email: 120, instagram: 60 };
         const sets = [], args = [];
         for (const [k, max] of Object.entries(F)) if (k in b) { sets.push(`${k}=?`); args.push(str(b[k], max)); }
         if (b.color && !/^#[0-9a-fA-F]{6}$/.test(b.color)) return err('Warna harus format hex, mis. #1E5AA8');
@@ -610,7 +650,12 @@ export async function onRequest(ctx) {
         const where = ['1=1'], args = [];
         if (!isAdmin && res.scope === 'unit') { where.push('unit_slug=?'); args.push(user.unit_slug); }
         else if (q.get('unit') && res.scope === 'unit') { where.push('unit_slug=?'); args.push(q.get('unit')); }
+        if (res.scope === 'major') {
+          if (!dudiAll(user)) { where.push('major=?'); args.push(user.unit_slug); }
+          else if (q.get('unit')) { where.push('major=?'); args.push(q.get('unit')); }
+        }
         if (q.get('q') && res.fields.title) { where.push('title LIKE ?'); args.push(`%${q.get('q')}%`); }
+        if (q.get('q') && area === 'dudi') { where.push('(name LIKE ? OR address LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
         const limit = clampInt(q.get('limit'), 20, 1, 100), page = clampInt(q.get('page'), 1, 1, 9999);
         const cols = area === 'posts' ? 'id,slug,title,cover,category,unit_slug,status,featured,views,author_name,published_at' : '*';
         const [rows, total] = await Promise.all([
@@ -641,6 +686,8 @@ export async function onRequest(ctx) {
           else if ('unit_slug' in data && data.unit_slug !== 'sekolah' &&
             !(await db.prepare(`SELECT slug FROM units WHERE slug=?`).bind(data.unit_slug).first())) data.unit_slug = 'sekolah';
         }
+        if (res.scope === 'major' && !dudiAll(user)) data.major = user.unit_slug;
+        if (res.scope === 'major' && 'major' in data && !JURUSAN.has(data.major)) return err('Pilih program keahlian.');
         if (method === 'POST') for (const r of res.required) if (!data[r]) return err(`Kolom "${r}" wajib diisi.`);
         if (method === 'PUT') for (const r of res.required) if (r in data && !data[r]) return err(`Kolom "${r}" wajib diisi.`);
 
