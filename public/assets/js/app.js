@@ -778,6 +778,7 @@ function notFound(main) {
 PAGES.notfound = notFound;
 
 // ---------- DUDI / Mitra Industri ----------
+const dKey = (n) => String(n || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
 const mapsLink = (x) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([x.name, x.address || 'Surabaya'].join(' '))}`;
 const initials = (n) => String(n).replace(/^(PT|CV|UD|TP|LKP)\.?\s+/i, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 function dudiCard(x, compact = false) {
@@ -786,7 +787,7 @@ function dudiCard(x, compact = false) {
     <span class="dudi-logo">${x.logo ? `<img src="${esc(x.logo)}" alt="">` : esc(initials(x.name) || '?')}</span>
     <div><b>${esc(x.name)}</b>${x.field ? `<small class="dudi-field">${esc(x.field)}</small>` : ''}
       ${!compact && x.address ? `<span class="dudi-addr">${icon('pin')}${esc(x.address)}</span>` : ''}
-      <span class="dudi-meta">${compact ? '' : unitBadge(x.major, true)}<a href="${mapsLink(x)}" target="_blank" rel="noopener">Peta ${icon('arrowUR')}</a>${x.website ? `<a href="${esc(safeUrl(x.website))}" target="_blank" rel="noopener">Website ${icon('arrowUR')}</a>` : ''}</span></div>
+      <span class="dudi-meta">${compact ? '' : (x.majors || [x.major]).map((m) => unitBadge(m, true)).join('')}<a href="${mapsLink(x)}" target="_blank" rel="noopener">Peta ${icon('arrowUR')}</a>${x.website ? `<a href="${esc(safeUrl(x.website))}" target="_blank" rel="noopener">Website ${icon('arrowUR')}</a>` : ''}</span></div>
   </div>`;
 }
 PAGES.dudi = async (main) => {
@@ -803,12 +804,21 @@ PAGES.dudi = async (main) => {
   </div></section>`;
   const all = await api('dudi');
   const per = all.perMajor || {};
-  const uniq = new Set(all.items.map((x) => x.name.toLowerCase().trim())).size;
+  const uniq = new Set(all.items.map((x) => dKey(x.name))).size;
   $('#dudiStats').innerHTML = `<div class="stat"><b>${uniq}</b><span>Mitra industri</span></div>` + jur.map((u) => `<div class="stat"><b style="color:${u.color}">${per[u.slug] || 0}</b><span>${esc(u.name)}</span></div>`).join('');
   $('#fMajor').innerHTML = [['', 'Semua jurusan', '#0d1a2e'], ...jur.map((u) => [u.slug, u.name, u.color])].map(([v, l, c]) => `<button class="chip-btn${v === major ? ' on' : ''}" data-v="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)}${v ? ` <small>${per[v] || 0}</small>` : ''}</button>`).join('');
   const draw = () => {
     const k = q.toLowerCase();
-    const items = all.items.filter((x) => (!major || x.major === major) && (!k || (x.name + ' ' + (x.address || '') + ' ' + (x.field || '')).toLowerCase().includes(k)));
+    let items = all.items.filter((x) => (!major || x.major === major) && (!k || (x.name + ' ' + (x.address || '') + ' ' + (x.field || '')).toLowerCase().includes(k)));
+    if (!major) { // tampilan "Semua jurusan": nama industri yang sama cukup tampil sekali, dengan label semua jurusannya
+      const map = new Map();
+      for (const x of items) {
+        const key = dKey(x.name), g = map.get(key);
+        if (g) { if (!g.majors.includes(x.major)) g.majors.push(x.major); if (!g.address && x.address) g.address = x.address; }
+        else map.set(key, { ...x, majors: [x.major] });
+      }
+      items = [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'id'));
+    }
     $('#dudiCount').textContent = `${items.length} industri`;
     $('#dudiList').innerHTML = items.length ? items.map((x) => dudiCard(x)).join('') : `<div style="grid-column:1/-1">${empty('Tidak ada industri yang cocok.')}</div>`;
     history.replaceState(null, '', '/dudi' + (major ? '?jurusan=' + major : ''));

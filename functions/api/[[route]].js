@@ -180,20 +180,45 @@ async function ensureSchema(db) {
     'Website resmi SMK Negeri 8 Surabaya kini hadir dengan halaman khusus untuk setiap program keahlian, LSP, dan Bursa Kerja Khusus.',
     '<p>Website resmi SMK Negeri 8 Surabaya kini hadir dengan tampilan baru. Setiap program keahlian — Kecantikan, Perhotelan, Kuliner/Tata Boga, Desain Komunikasi Visual (DKV), dan Tata Busana — serta Teaching Factory (TEFA) di setiap keahlian memiliki halaman sendiri yang berisi profil, kompetensi, kegiatan, agenda, dan galeri.</p><p>Selain itu, tersedia halaman <strong>LSP P1</strong> untuk informasi skema sertifikasi kompetensi, serta <strong>Bursa Kerja Khusus (BKK)</strong> untuk informasi lowongan kerja bagi lulusan.</p><p>Ikuti juga kabar terbaru kami di Instagram <strong>@skadela_sby</strong>, Facebook <strong>@smekdels</strong>, serta kanal YouTube <strong>SMK NEGERI 8 SURABAYA OFFICIAL</strong>.</p>',
     t, t, t));
-  // Data awal DUDI — hanya sekali (bila admin menghapusnya kelak, tidak diisi ulang)
-  const seeded = await db.prepare(`SELECT value FROM settings WHERE key='dudi_seeded'`).first().catch(() => null);
-  if (!seeded) {
-    const t2 = now();
-    for (let i = 0; i < DUDI_SEED.length; i += 18) { // 18 baris x 5 kolom = 90 parameter per perintah
-      const chunk = DUDI_SEED.slice(i, i + 18);
-      stmts.push(db.prepare(`INSERT INTO dudi(name,address,major,sort,created_at) VALUES ${chunk.map(() => '(?,?,?,?,?)').join(',')}`)
-        .bind(...chunk.flatMap(([major, name, address], j) => [name, address, major, i + j, t2])));
-    }
-    stmts.push(db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('dudi_seeded','1')`));
-  }
-  stmts.push(db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('schema_version',?)`).bind(SCHEMA_VERSION));
   await db.batch(stmts);
+  await syncDudi(db);
+  await db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('schema_version',?)`).bind(SCHEMA_VERSION).run();
   schemaReady = true;
+}
+
+// Kunci pembanding nama DUDI: huruf kecil, tanpa spasi/tanda baca ("Hotel Neo Gubeng" = "HOTEL NEO-GUBENG")
+const dudiKey = (n) => String(n || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
+
+// Hapus DUDI ganda per jurusan (sisakan yang pertama), pasang kunci unik, lalu lengkapi data awal yang belum ada
+async function syncDudi(db) {
+  const rows = (await db.prepare(`SELECT id, major, name, nkey FROM dudi ORDER BY id`).all()).results;
+  const seen = new Set(), dupIds = [], fix = [];
+  for (const r of rows) {
+    const k = dudiKey(r.name), key = r.major + '|' + k;
+    if (seen.has(key)) { dupIds.push(r.id); continue; }
+    seen.add(key);
+    if (r.nkey !== k) fix.push([k, r.id]);
+  }
+  const ops = [];
+  for (let i = 0; i < dupIds.length; i += 90) {
+    const c = dupIds.slice(i, i + 90);
+    ops.push(db.prepare(`DELETE FROM dudi WHERE id IN (${c.map(() => '?').join(',')})`).bind(...c));
+  }
+  for (const [k, id] of fix) ops.push(db.prepare(`UPDATE dudi SET nkey=? WHERE id=?`).bind(k, id));
+  for (let i = 0; i < ops.length; i += 50) await db.batch(ops.slice(i, i + 50));
+  await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS ux_dudi_major_nkey ON dudi(major, nkey)`).run();
+
+  const seeded = await db.prepare(`SELECT value FROM settings WHERE key='dudi_seeded'`).first('value');
+  if (seeded !== '2') {
+    const t2 = now(), ins = [];
+    for (let i = 0; i < DUDI_SEED.length; i += 15) { // 15 baris x 6 kolom = 90 parameter
+      const chunk = DUDI_SEED.slice(i, i + 15);
+      ins.push(db.prepare(`INSERT OR IGNORE INTO dudi(name,address,major,nkey,sort,created_at) VALUES ${chunk.map(() => '(?,?,?,?,?,?)').join(',')}`)
+        .bind(...chunk.flatMap(([major, name, address], j) => [name, address, major, dudiKey(name), i + j, t2])));
+    }
+    ins.push(db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('dudi_seeded','2')`));
+    await db.batch(ins);
+  }
 }
 
 // ---------------- password & sesi ----------------
@@ -336,7 +361,7 @@ export async function onRequest(ctx) {
         db.prepare(`SELECT slug,type,name,short,tagline,color,icon,logo,cover,parent,sort FROM units ORDER BY sort`).all(),
         db.prepare(`SELECT (SELECT COUNT(*) FROM posts WHERE status='publish') posts,
           (SELECT COUNT(*) FROM lowongan WHERE status='buka') lowongan, (SELECT COUNT(*) FROM skema) skema,
-          (SELECT COUNT(DISTINCT lower(trim(name))) FROM dudi) dudi`).first(),
+          (SELECT COUNT(DISTINCT nkey) FROM dudi) dudi`).first(),
       ]);
       const settings = Object.fromEntries(s.results.filter((r) => !PRIVATE_SETTINGS.includes(r.key)).map((r) => [r.key, r.value]));
       settings.ig_connected = s.results.some((r) => (r.key === 'ig_token' || r.key === 'ig_feed_url') && r.value) ? '1' : '';
@@ -688,6 +713,7 @@ export async function onRequest(ctx) {
         }
         if (res.scope === 'major' && !dudiAll(user)) data.major = user.unit_slug;
         if (res.scope === 'major' && 'major' in data && !JURUSAN.has(data.major)) return err('Pilih program keahlian.');
+        if (area === 'dudi' && data.name) data.nkey = dudiKey(data.name);
         if (method === 'POST') for (const r of res.required) if (!data[r]) return err(`Kolom "${r}" wajib diisi.`);
         if (method === 'PUT') for (const r of res.required) if (r in data && !data[r]) return err(`Kolom "${r}" wajib diisi.`);
 
@@ -722,6 +748,7 @@ export async function onRequest(ctx) {
     return err('Endpoint tidak ditemukan', 404);
   } catch (e) {
     console.error(e);
+    if (/UNIQUE constraint failed: dudi/i.test(String(e && e.message))) return err('DUDI dengan nama yang sama sudah ada di jurusan tersebut.', 409);
     return err('Terjadi kesalahan server: ' + (e && e.message ? e.message : e), 500);
   }
 }
