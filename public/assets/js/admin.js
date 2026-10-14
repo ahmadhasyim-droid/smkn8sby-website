@@ -17,6 +17,7 @@ const P = {
   badge: '<circle cx="12" cy="9" r="5.5"/><path d="M9.5 9l1.8 1.8L15 7.2"/><path d="M8.5 13.8L7 21l5-2.8 5 2.8-1.5-7.2"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   handshake: '<path d="M11 17l2 2a1.4 1.4 0 0 0 2-2"/><path d="M14 14l2.5 2.5a1.4 1.4 0 0 0 2-2L15 11l-1.5 1.5a2 2 0 0 1-3-3L13 7l-1-1-4 4"/><path d="M2 11l4-4 3 1M22 11l-4-4h-3"/>',
+  trophy: '<path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
   users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/>',
@@ -219,6 +220,32 @@ const RES = {
       { k: 'logo', label: 'Logo perusahaan', type: 'logo' },
     ],
   },
+  prestasi: {
+    title: 'Prestasi Siswa', single: 'prestasi', icon: 'trophy',
+    cols: [
+      ['', (r) => (r.image ? `<img class="thumb" src="${esc(r.image)}" alt="">` : `<span class="thumb" style="display:block"></span>`)],
+      ['Prestasi', (r) => `<span class="t-title">${esc(r.rank || '')} — ${esc(r.field || r.title)}</span><span class="t-sub">${esc(r.title)}</span>`],
+      ['Peraih', (r) => esc(String(r.students || '').split('\n')[0].split(' — ')[0]) + (String(r.students || '').split('\n').length > 1 ? ' <span class="t-sub">dkk.</span>' : '')],
+      ['Tingkat', (r) => `${esc(r.level || '-')}${r.year ? `<br><span class="t-sub">${r.year}</span>` : ''}`],
+      ['Unit', (r) => unitTag(r.unit_slug)],
+    ],
+    main: () => [
+      { k: 'rank', label: 'Juara / capaian', required: true, placeholder: 'mis. Juara 1, Medali Emas, Best Kontingen', half: true },
+      { k: 'field', label: 'Bidang / cabang lomba', placeholder: 'mis. Hotel Reception, Pencak Silat — Tanding Putri', half: true },
+      { k: 'title', label: 'Nama kejuaraan / lomba', required: true, placeholder: 'mis. LKS Dikmen Tingkat Nasional 2026' },
+      { k: 'students', label: 'Peraih prestasi (satu baris satu orang: Nama — Kelas)', type: 'textarea', rows: 4, placeholder: 'Rehan Saputra — XI PH 2' },
+      { k: 'level', label: 'Tingkat', type: 'select', half: true, opts: () => ['Kota', 'Provinsi', 'Nasional', 'Internasional'].map((x) => ({ v: x, l: x })) },
+      { k: 'level_detail', label: 'Keterangan tingkat (opsional)', placeholder: 'mis. Provinsi Jawa Timur', half: true },
+      { k: 'date_text', label: 'Tanggal pelaksanaan', placeholder: 'mis. 9–11 Februari 2026', half: true },
+      { k: 'year', label: 'Tahun', type: 'number', half: true },
+      { k: 'category', label: 'Kategori', type: 'select', half: true, opts: () => ['LKS', 'Olahraga', 'Seni & Budaya', 'Akademik', 'Kreativitas', 'Paskibra', 'Alumni', 'Lainnya'].map((x) => ({ v: x, l: x })) },
+      ...(isAdmin() ? [{ k: 'unit_slug', label: 'Program keahlian', type: 'select', half: true, opts: unitOptions, default: 'sekolah' }] : []),
+      { k: 'description', label: 'Keterangan tambahan (opsional)', type: 'textarea', rows: 2 },
+      ...(isAdmin() ? [{ k: 'featured', label: 'Tampilkan di beranda', type: 'check', help: 'Prestasi tingkat nasional & internasional otomatis diutamakan di beranda.' }] : []),
+      { k: 'image', label: 'Foto / sertifikat / poster', type: 'image' },
+    ],
+    view: () => '/prestasi',
+  },
   dudi: {
     title: 'DUDI / Mitra Industri', single: 'DUDI', icon: 'handshake',
     cols: [
@@ -258,7 +285,7 @@ const RES = {
 
 // ---------- Kerangka panel ----------
 function menu() {
-  const u = ME.unit_slug, items = [['dashboard', 'Dasbor', 'dash'], ['posts', 'Berita & Kegiatan', 'news'], ['agenda', 'Agenda', 'cal'], ['gallery', 'Galeri', 'img']];
+  const u = ME.unit_slug, items = [['dashboard', 'Dasbor', 'dash'], ['posts', 'Berita & Kegiatan', 'news'], ['agenda', 'Agenda', 'cal'], ['gallery', 'Galeri', 'img'], ['prestasi', 'Prestasi Siswa', 'trophy']];
   const groups = [['Konten', items]];
   if (isAdmin()) {
     groups.push(['Unit', [['units', 'Profil Jurusan, Lembaga & TEFA', 'unit'], ['dudi', 'DUDI / Mitra Industri', 'handshake'], ['lowongan', 'Lowongan (BKK)', 'job'], ['skema', 'Skema (LSP)', 'badge']]]);
@@ -284,7 +311,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 10</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 11</span>
       </div>
     </aside>
     <div class="main">
@@ -309,7 +336,7 @@ V.dashboard = async (view) => {
   if (d.skema !== undefined) stats.push([d.skema, 'Skema sertifikasi', '#e3262b']);
   if (d.users !== undefined) stats.push([d.users, 'Pengguna', '#24282e']);
   if (d.unread !== undefined) stats.push([d.unread, 'Pesan belum dibaca', '#d2372b']);
-  const quick = [['posts/new', 'Tulis berita / kegiatan', 'news'], ['agenda/new', 'Tambah agenda', 'cal'], ['gallery', 'Unggah foto galeri', 'img']];
+  const quick = [['posts/new', 'Tulis berita / kegiatan', 'news'], ['prestasi/new', 'Tambah prestasi siswa', 'trophy'], ['agenda/new', 'Tambah agenda', 'cal'], ['gallery', 'Unggah foto galeri', 'img']];
   if (!isAdmin()) quick.push([`units/${ME.unit_slug}`, 'Perbarui profil unit', 'unit']);
   if (isAdmin() || ME.unit_slug === 'bkk') quick.push(['lowongan/new', 'Tambah lowongan', 'job']);
   if (isAdmin() || ME.unit_slug === 'lsp') quick.push(['skema/new', 'Tambah skema', 'badge']);
@@ -332,9 +359,9 @@ async function listView(view, key) {
   setHead(R.title, `<a class="btn btn-primary" href="#/${key}/new">${ic('plus')}Tambah ${R.single}</a>`);
   let page = 1, q = '', unit = '';
   view.innerHTML = `<div class="toolbar">
-      ${['posts', 'dudi'].includes(key) ? `<label class="search">${ic('search')}<input type="search" placeholder="${key === 'dudi' ? 'Cari nama industri…' : 'Cari judul…'}" id="q"></label>` : ''}
+      ${['posts', 'dudi', 'prestasi'].includes(key) ? `<label class="search">${ic('search')}<input type="search" placeholder="${key === 'dudi' ? 'Cari nama industri…' : 'Cari judul…'}" id="q"></label>` : ''}
       ${key === 'dudi' && (isAdmin() || ME.unit_slug === 'bkk') ? `<select id="fu"><option value="">Semua jurusan</option>${jurOptions().map((o) => `<option value="${o.v}">${esc(o.l)}</option>`).join('')}</select>` : ''}
-      ${isAdmin() && ['posts', 'agenda'].includes(key) ? `<select id="fu"><option value="">Semua unit</option>${unitOptions().map((o) => `<option value="${o.v}">${esc(o.l)}</option>`).join('')}</select>` : ''}
+      ${isAdmin() && ['posts', 'agenda', 'prestasi'].includes(key) ? `<select id="fu"><option value="">Semua unit</option>${unitOptions().map((o) => `<option value="${o.v}">${esc(o.l)}</option>`).join('')}</select>` : ''}
     </div><div class="table-wrap" id="tbl"></div><div class="pager" id="pg"></div>`;
   const load = async () => {
     const d = await api(`admin/${key}?page=${page}&limit=20${q ? '&q=' + encodeURIComponent(q) : ''}${unit ? '&unit=' + unit : ''}`);

@@ -5,12 +5,13 @@
 // =============================================================
 import { SCHEMA_VERSION, TABLES, DEFAULT_SETTINGS, DEFAULT_UNITS, MIGRATIONS } from '../../lib/schema.js';
 import { DUDI_SEED } from '../../lib/dudi-seed.js';
+import { PRESTASI_SEED } from '../../lib/prestasi-seed.js';
 const JURUSAN = new Set(DEFAULT_UNITS.filter((u) => u.type === 'jurusan').map((u) => u.slug));
 
 const SESSION_DAYS = 7;
 const MAX_MEDIA_BYTES = 1_900_000;
 const ROLES = ['admin', 'unit'];
-const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded'];
+const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded', 'prestasi_seeded'];
 const FEED_TTL = 60 * 60 * 1000; // feed YouTube/Instagram diperbarui tiap 1 jam
 
 // ---------------- feed YouTube & Instagram ----------------
@@ -182,9 +183,25 @@ async function ensureSchema(db) {
     t, t, t));
   await db.batch(stmts);
   await syncDudi(db);
+  await seedPrestasi(db);
   await db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('schema_version',?)`).bind(SCHEMA_VERSION).run();
   schemaReady = true;
 }
+
+// Data awal prestasi siswa — sekali saja; kunci unik (skey) mencegah data ganda
+async function seedPrestasi(db) {
+  if ((await db.prepare(`SELECT value FROM settings WHERE key='prestasi_seeded'`).first('value')) === '1') return;
+  const t = now(), cols = ['skey', 'title', 'field', 'rank', 'level', 'level_detail', 'date_text', 'year', 'students', 'unit_slug', 'category', 'image', 'images', 'sort', 'created_at'];
+  const ins = [];
+  for (let i = 0; i < PRESTASI_SEED.length; i += 6) { // 6 baris x 15 kolom = 90 parameter
+    const chunk = PRESTASI_SEED.slice(i, i + 6);
+    ins.push(db.prepare(`INSERT OR IGNORE INTO prestasi(${cols.join(',')}) VALUES ${chunk.map(() => `(${cols.map(() => '?').join(',')})`).join(',')}`)
+      .bind(...chunk.flatMap((r) => [r.skey, r.title, r.field, r.rank, r.level, r.level_detail, r.date_text, r.year, r.students, r.unit_slug, r.category, r.image, JSON.stringify(r.images || []), r.sort, t])));
+  }
+  ins.push(db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('prestasi_seeded','1')`));
+  await db.batch(ins);
+}
+const PRESTASI_ORDER = "(year IS NULL), year DESC, CASE level WHEN 'Internasional' THEN 0 WHEN 'Nasional' THEN 1 WHEN 'Provinsi' THEN 2 ELSE 3 END, sort, id DESC";
 
 // Kunci pembanding nama DUDI: huruf kecil, tanpa spasi/tanda baca ("Hotel Neo Gubeng" = "HOTEL NEO-GUBENG")
 const dudiKey = (n) => String(n || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
@@ -294,6 +311,12 @@ const RESOURCES = {
     fields: { code: 60, name: 200, major: 40, level: 60, units_count: 'int', description: 2000, sort: 'int' },
     required: ['name'],
   },
+  prestasi: {
+    table: 'prestasi', scope: 'unit', order: PRESTASI_ORDER,
+    fields: { title: 250, field: 200, rank: 120, level: 30, level_detail: 150, date_text: 80, year: 'int', students: 3000, unit_slug: 40,
+      category: 40, image: 300, images: 3000, description: 3000, featured: 'bool', sort: 'int' },
+    required: ['title'],
+  },
   // DUDI: admin & BKK semua data; pengelola jurusan hanya DUDI jurusannya
   dudi: {
     table: 'dudi', scope: 'major', order: 'major, sort, name',
@@ -361,7 +384,7 @@ export async function onRequest(ctx) {
         db.prepare(`SELECT slug,type,name,short,tagline,color,icon,logo,cover,parent,sort FROM units ORDER BY sort`).all(),
         db.prepare(`SELECT (SELECT COUNT(*) FROM posts WHERE status='publish') posts,
           (SELECT COUNT(*) FROM lowongan WHERE status='buka') lowongan, (SELECT COUNT(*) FROM skema) skema,
-          (SELECT COUNT(DISTINCT nkey) FROM dudi) dudi`).first(),
+          (SELECT COUNT(DISTINCT nkey) FROM dudi) dudi, (SELECT COUNT(*) FROM prestasi) prestasi`).first(),
       ]);
       const settings = Object.fromEntries(s.results.filter((r) => !PRIVATE_SETTINGS.includes(r.key)).map((r) => [r.key, r.value]));
       settings.ig_connected = s.results.some((r) => (r.key === 'ig_token' || r.key === 'ig_feed_url') && r.value) ? '1' : '';
@@ -451,6 +474,19 @@ export async function onRequest(ctx) {
       const limit = clampInt(q.get('limit'), 50, 1, 100);
       const rows = await db.prepare(`SELECT * FROM lowongan WHERE ${where.join(' AND ')} ORDER BY ${RESOURCES.lowongan.order} LIMIT ?`).bind(...args, limit).all();
       return json({ items: rows.results });
+    }
+
+    if (method === 'GET' && parts[0] === 'prestasi') {
+      const where = ['1=1']; const args = [];
+      if (q.get('unit')) { where.push('unit_slug=?'); args.push(q.get('unit')); }
+      if (q.get('level')) { where.push('level=?'); args.push(q.get('level')); }
+      if (q.get('featured')) where.push("(featured=1 OR level IN ('Internasional','Nasional'))");
+      const limit = clampInt(q.get('limit'), 300, 1, 500);
+      const [rows, per] = await Promise.all([
+        db.prepare(`SELECT * FROM prestasi WHERE ${where.join(' AND ')} ORDER BY ${q.get('featured') ? "featured DESC, CASE level WHEN 'Internasional' THEN 0 WHEN 'Nasional' THEN 1 ELSE 2 END, " : ''}${PRESTASI_ORDER} LIMIT ?`).bind(...args, limit).all(),
+        db.prepare(`SELECT level, COUNT(*) n FROM prestasi GROUP BY level`).all(),
+      ]);
+      return json({ items: rows.results, perLevel: Object.fromEntries(per.results.map((r) => [r.level, r.n])) }, 200, { 'Cache-Control': 'public, max-age=60' });
     }
 
     if (method === 'GET' && parts[0] === 'dudi') {
@@ -679,7 +715,8 @@ export async function onRequest(ctx) {
           if (!dudiAll(user)) { where.push('major=?'); args.push(user.unit_slug); }
           else if (q.get('unit')) { where.push('major=?'); args.push(q.get('unit')); }
         }
-        if (q.get('q') && res.fields.title) { where.push('title LIKE ?'); args.push(`%${q.get('q')}%`); }
+        if (q.get('q') && res.fields.title && area !== 'prestasi') { where.push('title LIKE ?'); args.push(`%${q.get('q')}%`); }
+        if (q.get('q') && area === 'prestasi') { where.push('(title LIKE ? OR students LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
         if (q.get('q') && area === 'dudi') { where.push('(name LIKE ? OR address LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
         const limit = clampInt(q.get('limit'), 20, 1, 100), page = clampInt(q.get('page'), 1, 1, 9999);
         const cols = area === 'posts' ? 'id,slug,title,cover,category,unit_slug,status,featured,views,author_name,published_at' : '*';

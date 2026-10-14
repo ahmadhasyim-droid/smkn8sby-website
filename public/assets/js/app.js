@@ -40,6 +40,7 @@ const ICONS = {
   news: '<path d="M4 5h13v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M17 9h3v10a2 2 0 0 1-2 2"/><path d="M8 9h5M8 13h5M8 17h3"/>',
   book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M9 7h7M9 11h5"/>',
   handshake: '<path d="M11 17l2 2a1.4 1.4 0 0 0 2-2"/><path d="M14 14l2.5 2.5a1.4 1.4 0 0 0 2-2L15 11l-1.5 1.5a2 2 0 0 1-3-3L13 7l-1-1-4 4"/><path d="M2 11l4-4 3 1M22 11l-4-4h-3"/><path d="M6 13l3 3"/>',
+  trophy: '<path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
   play: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
 };
@@ -179,8 +180,9 @@ function renderShell() {
       ${tefa.length ? `<div class="dd"><button aria-haspopup="true">TEFA ${icon('chev')}</button><div class="dd-panel">${tefa.map(ddItem).join('')}</div></div>` : ''}
       <a href="/dudi"${act('dudi')}>DUDI</a>
       <a href="/perpustakaan"${act('perpustakaan')}>Perpustakaan</a>
-      <div class="dd"><button aria-haspopup="true"${['berita', 'artikel', 'agenda', 'galeri'].includes(page) ? ' class="active"' : ''}>Informasi ${icon('chev')}</button><div class="dd-panel">
+      <div class="dd"><button aria-haspopup="true"${['berita', 'artikel', 'agenda', 'galeri', 'prestasi'].includes(page) ? ' class="active"' : ''}>Informasi ${icon('chev')}</button><div class="dd-panel">
         ${ddLink('/berita', 'Berita & Kegiatan', 'Kabar terbaru sekolah & unit', 'news', '#235ba4')}
+        ${ddLink('/prestasi', 'Prestasi Siswa', 'Juara lomba tingkat kota hingga dunia', 'trophy', '#c08a1e')}
         ${ddLink('/agenda', 'Agenda', 'Jadwal kegiatan', 'calendar', '#16966a')}
         ${ddLink('/galeri', 'Galeri', 'Foto & video kegiatan', 'image', '#d6457e')}
       </div></div>
@@ -217,13 +219,14 @@ function renderShell() {
         ${s.spmb_link ? `<li><a href="${esc(safeUrl(s.spmb_link))}" target="_blank" rel="noopener">Info SPMB / PPDB</a></li>` : ''}</ul></div>
       ${tefa.length ? `<div><h4>Teaching Factory</h4><ul>${tefa.map((u) => `<li><a href="${unitUrl(u)}">${esc(u.name)}</a></li>`).join('')}</ul></div>` : ''}
       <div><h4>Jelajahi</h4><ul>
-        <li><a href="/profil">Profil Sekolah</a></li><li><a href="/dudi">DUDI / Mitra Industri</a></li><li><a href="/perpustakaan">Perpustakaan</a></li><li><a href="/berita">Berita & Kegiatan</a></li>
+        <li><a href="/profil">Profil Sekolah</a></li><li><a href="/dudi">DUDI / Mitra Industri</a></li><li><a href="/perpustakaan">Perpustakaan</a></li><li><a href="/prestasi">Prestasi Siswa</a></li><li><a href="/berita">Berita & Kegiatan</a></li>
         <li><a href="/agenda">Agenda</a></li><li><a href="/galeri">Galeri</a></li><li><a href="/kontak">Kontak</a></li>
         <li><a href="/admin/">Login Pengelola</a></li></ul></div>
     </div>
     <div class="foot-bottom"><span>© ${new Date().getFullYear()} ${esc(s.school_name)}. Hak cipta dilindungi.</span>
       <span>${[s.instagram && `IG @${esc(s.instagram)}`, s.facebook && `FB @${esc(s.facebook)}`, s.youtube && `YouTube ${esc(ytName(s))}`].filter(Boolean).join(' · ')}</span></div>
   </div></footer>
+  <div class="pmodal" id="pmodal" role="dialog" aria-modal="true" aria-label="Detail prestasi"></div>
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="true"><button aria-label="Tutup">${icon('x')}</button><div><img alt=""><p></p></div></div>`;
 
   const lb = $('#lightbox');
@@ -390,6 +393,11 @@ PAGES.home = async (main) => {
     <div class="stats">${stats.map(([v, l]) => `<div class="stat"><b>${esc(v)}${/^\d+$/.test(String(v)) && l.includes('terserap') ? '<sup>%</sup>' : ''}</b><span>${esc(l)}</span></div>`).join('')}</div>
   </div></section>
 
+  <section class="section alt prestasi-sec"><div class="wrap">
+    ${secHead('★', 'Prestasi Siswa', 'Juara dari kota<br>hingga dunia', '', `<a class="link-arrow" href="/prestasi">Semua prestasi ${icon('arrow')}</a>`)}
+    <div class="pres-grid" id="homePres">${'<div class="skel" style="height:300px"></div>'.repeat(4)}</div>
+  </div></section>
+
   ${tefa.length ? `<section class="section tefa-sec"><div class="wrap">
     ${secHead('03', 'Teaching Factory', 'Belajar sambil<br>berproduksi', 'Setiap program keahlian punya TEFA — unit produksi dan jasa sungguhan yang melayani masyarakat dan industri.')}
     <div class="tefa-grid">${tefa.map((u) => `
@@ -445,6 +453,7 @@ PAGES.home = async (main) => {
     </div>
   </div></section>`;
 
+  api('prestasi?featured=1&limit=4').then((d) => { PRES_CACHE = d.items; $('#homePres').innerHTML = d.items.length ? d.items.map(presCard).join('') : empty('Belum ada data prestasi.'); }).catch(() => {});
   if ($('#homeYT')) renderYouTube($('#homeYT'));
   if ($('#homeIG')) renderInstagram($('#homeIG'));
   const [news, agenda, gal, low, sk] = await Promise.all([
@@ -507,7 +516,7 @@ PAGES.unit = async (main) => {
   const parent = isTefa ? UNITS[unit.parent] : null;
   const myTefa = isJur ? Object.values(UNITS).find((u) => u.type === 'tefa' && u.parent === slug) : null;
   const tabs = [['profil', 'Profil'], [isLSP ? 'skema' : isBKK ? 'lowongan' : isTefa ? 'layanan' : 'kompetensi', isLSP ? 'Skema Sertifikasi' : isBKK ? 'Lowongan Kerja' : isTefa ? 'Produk & Layanan' : 'Kompetensi'],
-    ...(isJur ? [['dudi', 'Mitra DUDI']] : []), ['kegiatan', 'Kegiatan'], ['agenda', 'Agenda'], ['galeri', 'Galeri']];
+    ...(isJur ? [['dudi', 'Mitra DUDI'], ['prestasi', 'Prestasi']] : []), ['kegiatan', 'Kegiatan'], ['agenda', 'Agenda'], ['galeri', 'Galeri']];
   const others = Object.values(UNITS).filter((u) => u.slug !== slug);
   const komp = lines(unit.kompetensi), prospek = lines(unit.prospek);
 
@@ -539,6 +548,7 @@ PAGES.unit = async (main) => {
         <div id="jurLinks"></div></div>
       <div class="unit-block" id="dudi"><h2>Mitra Industri (DUDI)</h2><p class="prose" style="margin-top:-6px;color:var(--muted)">Dunia usaha & dunia industri tempat siswa ${esc(unit.name)} praktik kerja lapangan dan magang.</p>
         <div class="dudi-grid compact" id="unitDudi"></div><p style="margin-top:16px"><a class="link-arrow" href="/dudi?jurusan=${esc(slug)}">Lihat semua DUDI ${esc(unit.short || '')} ${icon('arrow')}</a></p></div>` : ''}
+      ${isJur ? `<div class="unit-block" id="prestasi"><h2>Prestasi Siswa</h2><div class="pres-grid two" id="unitPres"></div><p style="margin-top:16px"><a class="link-arrow" href="/prestasi?jurusan=${esc(slug)}">Semua prestasi ${esc(unit.short || '')} ${icon('arrow')}</a></p></div>` : ''}
       <div class="unit-block" id="kegiatan"><h2>Kegiatan & Berita</h2><div class="news-grid" style="grid-template-columns:repeat(2,1fr)" id="unitNews"></div>
         <p style="margin-top:20px"><a class="link-arrow" href="/berita?unit=${esc(slug)}">Semua berita ${esc(unit.short || unit.name)} ${icon('arrow')}</a></p></div>
       <div class="unit-block" id="agenda"><h2>Agenda</h2><div class="agenda-list" id="unitAgenda"></div></div>
@@ -564,6 +574,7 @@ PAGES.unit = async (main) => {
   const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) links.forEach((l) => l.classList.toggle('on', l.hash === '#' + e.target.id)); }), { rootMargin: '-40% 0px -55% 0px' });
   $$('.unit-block[id]').forEach((b) => io.observe(b));
 
+  if (isJur) api('prestasi?unit=' + slug + '&limit=6').then((d) => { PRES_CACHE = d.items; $('#unitPres').innerHTML = d.items.length ? d.items.map(presCard).join('') : empty('Belum ada data prestasi.'); }).catch(() => {});
   const [news, agenda, gal] = await Promise.all([api(`posts?unit=${slug}&limit=4`), api(`agenda?unit=${slug}&limit=8`), api(`gallery?unit=${slug}&limit=12`)]);
   $('#unitNews').innerHTML = news.items.length ? news.items.map((p) => postCard(p)).join('') : `<div style="grid-column:1/-1">${empty('Belum ada kegiatan yang dipublikasikan.')}</div>`;
   $('#unitAgenda').innerHTML = agenda.items.length ? agenda.items.map((a) => agendaItem(a, (a.end_date || a.date) < agenda.today)).join('') : empty('Belum ada agenda.');
@@ -776,6 +787,93 @@ function notFound(main) {
   <section class="section"><div class="wrap"><a class="btn btn-dark" href="/">Kembali ke beranda ${icon('arrow')}</a></div></section>`;
 }
 PAGES.notfound = notFound;
+
+// ---------- Prestasi Siswa ----------
+let PRES_CACHE = [];
+const LEVELS = ['Internasional', 'Nasional', 'Provinsi', 'Kota'];
+const rankTone = (r) => { const s = String(r || '').toLowerCase();
+  if (/(juara\s*(1|i)\b|emas|gold|utama 1|terbaik$|penyaji terbaik)/.test(s)) return 'gold';
+  if (/(juara\s*(2|ii)\b|perak|silver)/.test(s)) return 'silver';
+  if (/(juara\s*(3|iii)\b|perunggu|bronze|terbaik 3)/.test(s)) return 'bronze';
+  return 'other'; };
+const presPeople = (p) => lines(p.students).map((l) => { const [n, k] = l.split(/\s+—\s+/); return { n, k: k || '' }; });
+const presWho = (p) => { const ppl = presPeople(p); return ppl.length ? ppl[0].n + (ppl.length > 1 ? ` & ${ppl.length - 1} lainnya` : '') : ''; };
+function presCard(p) {
+  const u = unitOf(p.unit_slug), tone = rankTone(p.rank), ppl = presPeople(p);
+  return `<button class="pres-card" data-pres="${p.id}" style="--c:${u.color}">
+    <span class="pres-img">${p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy">` : `<span class="ph-cover" style="--c:${u.color}">${icon('trophy')}</span>`}
+      <span class="pres-rank ${tone}">${icon('trophy')}${esc(p.rank || 'Prestasi')}</span></span>
+    <span class="pres-body">
+      <span class="pres-meta"><span class="lvl lvl-${esc(String(p.level || '').toLowerCase())}">${esc(p.level || '')}</span>${p.year ? `<span>${p.year}</span>` : ''}</span>
+      <b>${esc(p.field || p.title)}</b>
+      <small>${esc(p.title)}</small>
+      <span class="pres-who">${icon('user')}${esc(presWho(p))}${ppl[0]?.k && ppl.length === 1 ? ` · ${esc(ppl[0].k)}` : ''}</span>
+    </span></button>`;
+}
+function openPres(p) {
+  const m = $('#pmodal'), u = unitOf(p.unit_slug);
+  let imgs = []; try { imgs = [p.image, ...JSON.parse(p.images || '[]')].filter(Boolean); } catch { imgs = [p.image].filter(Boolean); }
+  m.innerHTML = `<div class="pm-card" style="--c:${u.color}"><button class="pm-close" aria-label="Tutup">${icon('x')}</button>
+    <div class="pm-media">${imgs.length ? `<img src="${esc(imgs[0])}" alt="" id="pmMain">${imgs.length > 1 ? `<div class="pm-thumbs">${imgs.map((s, i) => `<img src="${esc(s)}" data-i="${i}" class="${i ? '' : 'on'}" alt="">`).join('')}</div>` : ''}` : `<div class="ph-cover" style="--c:${u.color};height:100%">${icon('trophy')}</div>`}</div>
+    <div class="pm-info">
+      <span class="pres-rank ${rankTone(p.rank)}" style="position:static">${icon('trophy')}${esc(p.rank || 'Prestasi')}</span>
+      <h3>${esc(p.field || p.title)}</h3><p class="pm-event">${esc(p.title)}</p>
+      <dl>
+        <dt>Tingkat</dt><dd>${esc(p.level || '-')}${p.level_detail && p.level_detail !== p.level ? ` — ${esc(p.level_detail)}` : ''}</dd>
+        ${p.date_text || p.year ? `<dt>Waktu</dt><dd>${esc(p.date_text || String(p.year))}</dd>` : ''}
+        ${p.category ? `<dt>Kategori</dt><dd>${esc(p.category)}</dd>` : ''}
+        <dt>Program keahlian</dt><dd>${p.unit_slug && p.unit_slug !== 'sekolah' ? `<a href="${unitUrl(u)}">${esc(u.name)}</a>` : 'SMKN 8 Surabaya'}</dd>
+      </dl>
+      <h4 class="mono">Peraih prestasi</h4>
+      <ul class="pm-people">${presPeople(p).map((x) => `<li><b>${esc(x.n)}</b>${x.k ? `<span>${esc(x.k)}</span>` : ''}</li>`).join('')}</ul>
+      ${p.description ? `<p>${esc(p.description)}</p>` : ''}
+    </div></div>`;
+  m.classList.add('open'); document.body.style.overflow = 'hidden';
+  $$('.pm-thumbs img', m).forEach((t) => (t.onclick = () => { $('#pmMain').src = t.src; $$('.pm-thumbs img', m).forEach((x) => x.classList.toggle('on', x === t)); }));
+}
+document.addEventListener('click', (e) => {
+  const c = e.target.closest('[data-pres]');
+  if (c) { const p = PRES_CACHE.find((x) => String(x.id) === c.dataset.pres); if (p) openPres(p); return; }
+  const m = document.getElementById('pmodal');
+  if (m && m.classList.contains('open') && (e.target === m || e.target.closest('.pm-close'))) { m.classList.remove('open'); document.body.style.overflow = ''; }
+});
+document.addEventListener('keydown', (e) => { const m = document.getElementById('pmodal'); if (e.key === 'Escape' && m?.classList.contains('open')) { m.classList.remove('open'); document.body.style.overflow = ''; } });
+
+PAGES.prestasi = async (main) => {
+  setTitle('Prestasi Siswa');
+  const jur = Object.values(UNITS).filter((u) => u.type === 'jurusan');
+  let unit = params.get('jurusan') || '', level = params.get('tingkat') || '', cat = '', q = '';
+  main.innerHTML = `${pageHero('Prestasi Siswa', 'Capaian peserta didik dan alumni SMK Negeri 8 Surabaya di berbagai kejuaraan — dari tingkat kota hingga internasional.', ['Prestasi'])}
+  <section class="section dark" style="padding:40px 0"><div class="wrap"><div class="stats" id="presStats"></div></div></section>
+  <section class="section" style="padding-top:40px"><div class="wrap">
+    <div class="filters" id="fLevel"></div>
+    <div class="filters" id="fUnit" style="margin-top:-12px"></div>
+    <div class="filters" style="margin-top:-12px"><select id="fCat" class="chip-btn" aria-label="Kategori"></select>
+      <label class="search" style="margin-left:0">${icon('search')}<input id="q" type="search" placeholder="Cari nama siswa atau lomba…" aria-label="Cari prestasi"></label><span id="presCount" class="mono" style="color:var(--muted)"></span></div>
+    <div class="pres-grid" id="presList">${'<div class="skel" style="height:320px"></div>'.repeat(4)}</div>
+  </div></section>`;
+  const d = await api('prestasi');
+  PRES_CACHE = d.items;
+  const per = d.perLevel || {};
+  $('#presStats').innerHTML = `<div class="stat"><b>${d.items.length}</b><span>Total prestasi</span></div>` + LEVELS.map((l) => `<div class="stat"><b>${per[l] || 0}</b><span>Tingkat ${l}</span></div>`).join('');
+  $('#fLevel').innerHTML = [['', 'Semua tingkat'], ...LEVELS.map((l) => [l, l])].map(([v, l]) => `<button class="chip-btn${v === level ? ' on' : ''}" data-v="${v}">${v ? icon('trophy') : ''}${esc(l)}${v ? ` <small>${per[v] || 0}</small>` : ''}</button>`).join('');
+  $('#fUnit').innerHTML = [['', 'Semua jurusan', '#0d1a2e'], ...jur.map((u) => [u.slug, u.name, u.color]), ['sekolah', 'Umum / Lintas jurusan', '#235ba4']].map(([v, l, c]) => `<button class="chip-btn${v === unit ? ' on' : ''}" data-v="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)}</button>`).join('');
+  const cats = [...new Set(d.items.map((x) => x.category).filter(Boolean))].sort();
+  $('#fCat').innerHTML = `<option value="">Semua kategori</option>${cats.map((c) => `<option>${esc(c)}</option>`).join('')}`;
+  const draw = () => {
+    const k = q.toLowerCase();
+    const items = d.items.filter((x) => (!unit || x.unit_slug === unit) && (!level || x.level === level) && (!cat || x.category === cat)
+      && (!k || [x.students, x.title, x.field, x.rank].join(' ').toLowerCase().includes(k)));
+    $('#presCount').textContent = `${items.length} prestasi`;
+    $('#presList').innerHTML = items.length ? items.map(presCard).join('') : `<div style="grid-column:1/-1">${empty('Tidak ada prestasi yang cocok.')}</div>`;
+  };
+  const chip = (box, set) => (e) => { const b = e.target.closest('button'); if (!b) return; set(b.dataset.v); $$('button', box).forEach((x) => x.classList.toggle('on', x === b)); draw(); };
+  $('#fLevel').onclick = chip($('#fLevel'), (v) => (level = v));
+  $('#fUnit').onclick = chip($('#fUnit'), (v) => (unit = v));
+  $('#fCat').onchange = (e) => { cat = e.target.value; draw(); };
+  let t; $('#q').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { q = e.target.value.trim(); draw(); }, 200); };
+  draw();
+};
 
 // ---------- DUDI / Mitra Industri ----------
 const dKey = (n) => String(n || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
