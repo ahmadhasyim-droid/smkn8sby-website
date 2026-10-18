@@ -217,6 +217,7 @@ const RES = {
       { k: 'majors', label: 'Untuk lulusan jurusan', type: 'checks', opts: jurOptions, help: 'Kosongkan bila terbuka untuk semua jurusan.' },
       { k: 'apply_link', label: 'Tautan pendaftaran / kontak', type: 'url', placeholder: 'https://… atau https://wa.me/62…' },
       { k: 'description', label: 'Deskripsi & persyaratan', type: 'textarea', rows: 6 },
+      { k: 'poster', label: 'Pamflet / poster lowongan', type: 'image', help: 'Gambar pamflet akan tampil di halaman BKK dan bisa diperbesar pengunjung.' },
       { k: 'logo', label: 'Logo perusahaan', type: 'logo' },
     ],
   },
@@ -311,7 +312,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 11</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 12</span>
       </div>
     </aside>
     <div class="main">

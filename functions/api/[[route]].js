@@ -6,6 +6,7 @@
 import { SCHEMA_VERSION, TABLES, DEFAULT_SETTINGS, DEFAULT_UNITS, MIGRATIONS } from '../../lib/schema.js';
 import { DUDI_SEED } from '../../lib/dudi-seed.js';
 import { PRESTASI_SEED } from '../../lib/prestasi-seed.js';
+import { LOWONGAN_SEED } from '../../lib/lowongan-seed.js';
 const JURUSAN = new Set(DEFAULT_UNITS.filter((u) => u.type === 'jurusan').map((u) => u.slug));
 
 const SESSION_DAYS = 7;
@@ -184,6 +185,7 @@ async function ensureSchema(db) {
   await db.batch(stmts);
   await syncDudi(db);
   await seedPrestasi(db);
+  await seedLowongan(db);
   await db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('schema_version',?)`).bind(SCHEMA_VERSION).run();
   schemaReady = true;
 }
@@ -200,6 +202,13 @@ async function seedPrestasi(db) {
   }
   ins.push(db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('prestasi_seeded','1')`));
   await db.batch(ins);
+}
+// Lowongan dari pamflet — setiap entri hanya sekali (kunci skey)
+async function seedLowongan(db) {
+  await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS ux_lowongan_skey ON lowongan(skey)`).run();
+  const t = now();
+  await db.batch(LOWONGAN_SEED.map((j) => db.prepare(`INSERT OR IGNORE INTO lowongan(skey,company,position,location,job_type,majors,description,apply_link,poster,status,created_at)
+    VALUES(?,?,?,?,?,?,?,?,?,'buka',?)`).bind(j.skey, j.company, j.position, j.location, j.job_type, j.majors, j.description, j.apply_link, j.poster, t)));
 }
 const PRESTASI_ORDER = "(year IS NULL), year DESC, CASE level WHEN 'Internasional' THEN 0 WHEN 'Nasional' THEN 1 WHEN 'Provinsi' THEN 2 ELSE 3 END, sort, id DESC";
 
@@ -303,7 +312,7 @@ const RESOURCES = {
   },
   lowongan: {
     table: 'lowongan', scope: 'bkk', order: "CASE status WHEN 'buka' THEN 0 ELSE 1 END, id DESC",
-    fields: { company: 150, position: 150, location: 150, job_type: 40, majors: 200, deadline: 10, description: 5000, apply_link: 300, logo: 300, status: 10 },
+    fields: { company: 150, position: 150, location: 150, job_type: 40, majors: 200, deadline: 10, description: 5000, apply_link: 300, logo: 300, poster: 300, status: 10 },
     required: ['company', 'position'],
   },
   skema: {

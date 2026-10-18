@@ -558,6 +558,17 @@ select.chip-btn { appearance: auto; padding-right: 10px; }
 @media (max-width: 1180px) { .pres-grid, .pres-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pm-card { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .pres-grid, .pres-grid.two { grid-template-columns: 1fr; } .pm-info dl { grid-template-columns: 1fr; } }
 
+
+/* ---------- Pamflet lowongan ---------- */
+.job-card.has-poster { grid-template-columns: 120px 1fr auto; }
+.job-card .jp { position: relative; display: block; width: 120px; aspect-ratio: 4 / 5; border-radius: 6px; overflow: hidden; background: var(--paper); border: 1px solid var(--line); cursor: zoom-in; }
+.job-card .jp img { width: 100%; height: 100%; object-fit: cover; object-position: top; transition: .3s; }
+.job-card .jp:hover img { transform: scale(1.05); }
+.job-card .jp span { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 4px; font-size: .7rem; font-weight: 700; color: #fff; background: rgba(13, 26, 46, .78); }
+.job-card .jp span .ico { width: 12px; height: 12px; }
+.job-card .desc a { color: var(--blue); text-decoration: underline; word-break: break-all; }
+@media (max-width: 720px) { .job-card.has-poster { grid-template-columns: 88px 1fr; } .job-card .jp { width: 88px; } }
+
 /* ---------- Footer ---------- */
 .site-footer { background: var(--ink); color: #aab7ca; font-size: .92rem; }
 .site-footer .wrap { padding: 64px 0 28px; }

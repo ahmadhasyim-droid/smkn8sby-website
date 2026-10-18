@@ -606,16 +606,21 @@ PAGES.unit = async (main) => {
   if (location.hash) setTimeout(() => $(location.hash)?.scrollIntoView(), 50);
 };
 
+// Jadikan URL & email dalam teks bisa diklik (teks sudah di-escape)
+const linkify = (t) => t.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+  .replace(/([\w.+-]+@[\w-]+\.[\w.]+)/g, '<a href="mailto:$1">$1</a>');
 const jobCard = (j) => {
   const majors = String(j.majors || '').split(',').map((x) => x.trim()).filter((x) => UNITS[x]);
   const closed = j.status !== 'buka' || (j.deadline && j.deadline < new Date().toISOString().slice(0, 10));
-  return `<div class="job-card${closed ? ' closed' : ''}">
-    <div class="jl">${j.logo ? `<img src="${esc(j.logo)}" alt="">` : esc((j.company || '?').trim()[0])}</div>
+  return `<div class="job-card${closed ? ' closed' : ''}${j.poster ? ' has-poster' : ''}">
+    ${j.poster ? `<a class="jp" href="${esc(j.poster)}" data-lightbox="${esc(j.poster)}" data-caption="${esc(j.position + ' — ' + j.company)}" title="Lihat pamflet"><img src="${esc(j.poster)}" alt="Pamflet lowongan ${esc(j.position)}" loading="lazy"><span>${icon('image')} Pamflet</span></a>`
+      : `<div class="jl">${j.logo ? `<img src="${esc(j.logo)}" alt="">` : esc((j.company || '?').trim()[0])}</div>`}
     <div><h4>${esc(j.position)}</h4><div class="co">${esc(j.company)}${j.location ? ' · ' + esc(j.location) : ''}</div>
       <div class="meta" style="margin-top:8px"><span class="badge soft" style="--c:${closed ? '#888' : '#16966a'}">${closed ? 'Ditutup' : 'Dibuka'}</span>
         ${j.job_type ? `<span>${esc(j.job_type)}</span>` : ''}${j.deadline ? `<span>${icon('calendar')}Batas ${fmtDate(j.deadline)}</span>` : ''}
         ${majors.map((m) => unitBadge(m, true)).join('')}</div>
-      ${j.description ? `<details><summary>Lihat detail</summary><div class="desc">${esc(j.description)}</div></details>` : ''}
+      ${!majors.length ? '<span class="badge soft" style="--c:#235ba4;margin-top:6px">Semua jurusan</span>' : ''}
+      ${j.description ? `<details><summary>Lihat detail & cara melamar</summary><div class="desc">${linkify(esc(j.description))}</div></details>` : ''}
     </div>
     <div>${j.apply_link && !closed ? `<a class="btn btn-dark btn-sm" href="${esc(safeUrl(j.apply_link))}" target="_blank" rel="noopener">Lamar ${icon('arrowUR')}</a>` : ''}</div>
   </div>`;
