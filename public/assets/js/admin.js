@@ -335,7 +335,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 14</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 15</span>
       </div>
     </aside>
     <div class="main">
@@ -595,7 +595,7 @@ V.users = async (view) => {
       try { await api('admin/users' + (u.id ? '/' + u.id : ''), { method: u.id ? 'PUT' : 'POST', body: d }); m.remove(); toast('Pengguna tersimpan'); load(); } catch (er) { toast(er.message, true); }
     };
   };
-  view.innerHTML = `<div class="notice info"><b>Administrator</b> dapat mengelola semua isi website. <b>Pengelola unit</b> hanya dapat mengelola berita, agenda, galeri, prestasi, dan profil unitnya sendiri. <b>Waka</b> (WMM, Kurikulum, Kesiswaan, Sarpras, Humas, SDM) juga mengelola <b>Program Sekolah</b>; pengelola BKK dan <b>Waka Humas</b> juga lowongan kerja & DUDI semua jurusan, pengelola LSP juga skema.</div><div class="table-wrap" id="tbl"></div>`;
+  view.innerHTML = `<div class="notice info"><b>Administrator</b> dapat mengelola semua isi website. <b>Pengelola unit</b> hanya dapat mengelola berita, agenda, galeri, prestasi, dan profil unitnya sendiri. <b>Waka</b> (WMM, Kurikulum, Kesiswaan, Sarpras, Humas) juga mengelola <b>Program Sekolah</b>; pengelola BKK dan <b>Waka Humas</b> juga lowongan kerja & DUDI semua jurusan, pengelola LSP juga skema.</div><div class="table-wrap" id="tbl"></div>`;
   let rows = [];
   const load = async () => {
     rows = (await api('admin/users')).items;
