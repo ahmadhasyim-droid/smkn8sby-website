@@ -17,6 +17,7 @@ const P = {
   badge: '<circle cx="12" cy="9" r="5.5"/><path d="M9.5 9l1.8 1.8L15 7.2"/><path d="M8.5 13.8L7 21l5-2.8 5 2.8-1.5-7.2"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   handshake: '<path d="M11 17l2 2a1.4 1.4 0 0 0 2-2"/><path d="M14 14l2.5 2.5a1.4 1.4 0 0 0 2-2L15 11l-1.5 1.5a2 2 0 0 1-3-3L13 7l-1-1-4 4"/><path d="M2 11l4-4 3 1M22 11l-4-4h-3"/>',
+  box: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
   trophy: '<path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
   clip: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6M9 18h3"/>',
   users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/>',
@@ -312,13 +313,14 @@ function menu() {
   if (isAdmin() || UNIT[u]?.type === 'waka') items.splice(1, 0, ['program', 'Program Sekolah', 'clip']);
   const groups = [['Konten', items]];
   if (isAdmin()) {
-    groups.push(['Unit', [['units', 'Profil Unit & Waka', 'unit'], ['dudi', 'DUDI / Mitra Industri', 'handshake'], ['lowongan', 'Lowongan (BKK)', 'job'], ['skema', 'Skema (LSP)', 'badge']]]);
+    groups.push(['Unit', [['units', 'Profil Unit & Waka', 'unit'], ['dudi', 'DUDI / Mitra Industri', 'handshake'], ['lowongan', 'Lowongan (BKK)', 'job'], ['skema', 'Skema (LSP)', 'badge'], ['/sarpras', 'SI-SARPRAS (Inventaris)', 'box']]]);
     groups.push(['Sekolah', [['settings', 'Pengaturan Situs', 'gear'], ['users', 'Pengguna & Akses', 'users'], ['messages', 'Pesan Masuk', 'mail']]]);
   } else {
     const g = [[`units/${u}`, 'Profil Unit', 'unit']];
     if (isBkk()) g.push(['lowongan', 'Lowongan Kerja (BKK)', 'job']);
     if (isBkk() || UNIT[u]?.type === 'jurusan') g.push(['dudi', 'DUDI / Mitra Industri', 'handshake']);
     if (u === 'lsp') g.push(['skema', 'Skema Sertifikasi', 'badge']);
+    if (u === 'waka-sarpras') g.push(['/sarpras', 'SI-SARPRAS (Inventaris)', 'box']);
     groups.push([UNIT[u]?.short || 'Unit', g]);
   }
   return groups;
@@ -330,12 +332,12 @@ function renderShell() {
     <aside class="side" id="side">
       <div class="side-brand"><img src="/assets/img/emblem-smkn8.png" alt=""><div><b>SMKN 8 Surabaya</b><span>Panel pengelola</span></div></div>
       <div class="side-role"><b>${esc(ME.name || ME.username)}</b><small>${isAdmin() ? 'Administrator sekolah' : `Pengelola ${esc(un?.name || ME.unit_slug)}`}</small></div>
-      <nav id="menu">${menu().map(([g, it]) => `<div class="grp">${esc(g)}</div>${it.map(([h, l, i]) => `<a href="#/${h}" data-h="${h}">${ic(i)}${esc(l)}${h === 'messages' ? '<span class="count" id="unread" hidden></span>' : ''}</a>`).join('')}`).join('')}</nav>
+      <nav id="menu">${menu().map(([g, it]) => `<div class="grp">${esc(g)}</div>${it.map(([h, l, i]) => `<a href="${h.startsWith('/') ? h : '#/' + h}" data-h="${h}">${ic(i)}${esc(l)}${h === 'messages' ? '<span class="count" id="unread" hidden></span>' : ''}</a>`).join('')}`).join('')}</nav>
       <div class="side-foot">
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 15</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 16</span>
       </div>
     </aside>
     <div class="main">
@@ -708,7 +710,12 @@ function authScreen(setup) {
   $('#af').onsubmit = async (e) => {
     e.preventDefault(); const b = $('button', e.target); b.disabled = true;
     const d = readForm(e.target, [{ k: 'name' }, { k: 'username' }, { k: 'password' }]);
-    try { await api(setup ? 'auth/setup' : 'auth/login', { method: 'POST', body: d }); boot(); }
+    try {
+      await api(setup ? 'auth/setup' : 'auth/login', { method: 'POST', body: d });
+      const next = new URLSearchParams(location.search).get('next') || '';
+      if (/^\/[a-z0-9/_-]*$/i.test(next) && !next.startsWith('//')) { location.href = next; return; }
+      boot();
+    }
     catch (er) { $('#am').innerHTML = `<div class="notice bad" style="margin:0">${esc(er.message)}</div>`; b.disabled = false; }
   };
 }

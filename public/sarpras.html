@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SI-SARPRAS — SMKN 8 Surabaya</title>
+<meta name="description" content="Sistem Informasi Sarana & Prasarana SMK Negeri 8 Surabaya: inventaris aset, serah terima BAST/BAPB, scan QR, dan laporan.">
+<meta name="theme-color" content="#0d1a2e">
+<link rel="icon" type="image/png" href="/assets/img/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/sarpras.css?v=16">
+</head>
+<body>
+<header class="sp-head no-print">
+  <div class="wrap sp-head-in">
+    <a class="sp-brand" href="/sarpras">
+      <img src="/assets/img/emblem-smkn8.png" alt="Logo SMKN 8 Surabaya" width="46" height="41">
+      <span><b>SI-SARPRAS <em>SMEKDEL'S</em></b><small>Sistem Informasi Sarana &amp; Prasarana SMKN 8 Surabaya</small></span>
+    </a>
+    <div class="sp-head-r">
+      <a class="sp-link" href="/waka/sarpras">Waka Sarpras</a>
+      <a class="sp-link" href="/">Website SMKN 8</a>
+      <span class="sp-mode" id="mode">Mode: Publik</span>
+      <span id="authBtn"></span>
+    </div>
+  </div>
+  <nav class="sp-tabs" aria-label="Menu SI-SARPRAS"><div class="wrap" id="tabs"></div></nav>
+</header>
+<main id="main" class="wrap sp-main"><div class="sp-loading">Memuat data sarpras…</div></main>
+<footer class="sp-foot no-print"><div class="wrap">© SMK Negeri 8 Surabaya · Waka Sarana &amp; Prasarana · <a href="/">smkn8-sby.sch.id</a></div></footer>
+<div id="modal" class="sp-modal" hidden><div class="sp-dialog" role="dialog" aria-modal="true"><button class="sp-x" data-close aria-label="Tutup">×</button><div id="modalBody"></div></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<script src="/assets/js/sarpras.js?v=16" defer></script>
+</body>
+</html>

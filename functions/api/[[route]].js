@@ -4,6 +4,7 @@
 //  Binding database yang dibutuhkan: DB (Cloudflare D1)
 // =============================================================
 import { SCHEMA_VERSION, TABLES, DEFAULT_SETTINGS, DEFAULT_UNITS, MIGRATIONS } from '../../lib/schema.js';
+import { SARPRAS_ASSETS, SARPRAS_LOCATIONS, SARPRAS_ANNOUNCEMENT, SARPRAS_TEMPLATE } from '../../lib/sarpras-seed.js';
 import { DUDI_SEED } from '../../lib/dudi-seed.js';
 import { PRESTASI_SEED } from '../../lib/prestasi-seed.js';
 import { LOWONGAN_SEED } from '../../lib/lowongan-seed.js';
@@ -12,7 +13,7 @@ const JURUSAN = new Set(DEFAULT_UNITS.filter((u) => u.type === 'jurusan').map((u
 const SESSION_DAYS = 7;
 const MAX_MEDIA_BYTES = 1_900_000;
 const ROLES = ['admin', 'unit'];
-const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded', 'prestasi_seeded'];
+const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded', 'prestasi_seeded', 'sarpras_seeded'];
 const FEED_TTL = 60 * 60 * 1000; // feed YouTube/Instagram diperbarui tiap 1 jam
 
 // ---------------- feed YouTube & Instagram ----------------
@@ -186,6 +187,7 @@ async function ensureSchema(db) {
   await syncDudi(db);
   await seedPrestasi(db);
   await seedLowongan(db);
+  await seedSarpras(db);
   await db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('schema_version',?)`).bind(SCHEMA_VERSION).run();
   schemaReady = true;
 }
@@ -210,6 +212,108 @@ async function seedLowongan(db) {
   await db.batch(LOWONGAN_SEED.map((j) => db.prepare(`INSERT OR IGNORE INTO lowongan(skey,company,position,location,job_type,majors,description,apply_link,poster,status,created_at)
     VALUES(?,?,?,?,?,?,?,?,?,'buka',?)`).bind(j.skey, j.company, j.position, j.location, j.job_type, j.majors, j.description, j.apply_link, j.poster, t)));
 }
+
+// ---------------- SI-SARPRAS ----------------
+const SARPRAS_COLS = ['id', 'code', 'kode_tu', 'name', 'specs', 'location', 'condition', 'quantity', 'procurement_date', 'handover_date', 'photo', 'photo_link', 'updated_at'];
+const SARPRAS_COND = ['Baik', 'Rusak Ringan', 'Rusak Berat'];
+// Data dari aplikasi Sarpras lama dimasukkan sekali saja
+async function seedSarpras(db) {
+  if ((await db.prepare(`SELECT value FROM settings WHERE key='sarpras_seeded'`).first('value')) === '1') return;
+  const ins = [];
+  for (let i = 0; i < SARPRAS_ASSETS.length; i += 7) { // 7 baris x 13 kolom = 91 parameter
+    const chunk = SARPRAS_ASSETS.slice(i, i + 7);
+    ins.push(db.prepare(`INSERT OR IGNORE INTO sarpras_assets(${SARPRAS_COLS.join(',')}) VALUES ${chunk.map(() => `(${SARPRAS_COLS.map(() => '?').join(',')})`).join(',')}`)
+      .bind(...chunk.flatMap((r) => SARPRAS_COLS.map((c) => r[c] ?? ''))));
+  }
+  const meta = { locations: SARPRAS_LOCATIONS, announcement: SARPRAS_ANNOUNCEMENT, template: SARPRAS_TEMPLATE };
+  for (const [k, v] of Object.entries(meta)) ins.push(db.prepare(`INSERT OR IGNORE INTO sarpras_meta(key,value) VALUES(?,?)`).bind(k, JSON.stringify(v)));
+  ins.push(db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('sarpras_seeded','1')`));
+  await db.batch(ins);
+}
+const canSarpras = (user) => !!user && (user.role === 'admin' || user.unit_slug === 'waka-sarpras');
+async function sarprasMeta(db) {
+  const rows = (await db.prepare(`SELECT key,value FROM sarpras_meta`).all()).results;
+  const m = Object.fromEntries(rows.map((r) => { try { return [r.key, JSON.parse(r.value)]; } catch { return [r.key, null]; } }));
+  return { locations: Array.isArray(m.locations) ? m.locations : [], announcement: m.announcement || {}, template: m.template || {} };
+}
+function sarprasAsset(b) {
+  const condition = SARPRAS_COND.includes(b.condition) ? b.condition : 'Baik';
+  const qty = clampInt(b.quantity, 1, 1, 1_000_000);
+  return {
+    code: str(b.code, 80) || 'INV-S8-' + Math.floor(1000 + Math.random() * 9000),
+    kode_tu: str(b.kode_tu, 300), name: str(b.name, 300), specs: str(b.specs, 2000), location: str(b.location, 300),
+    condition, quantity: qty, procurement_date: str(b.procurement_date, 40), handover_date: str(b.handover_date, 40),
+    photo: str(b.photo, 500), photo_link: str(b.photo_link, 500),
+  };
+}
+function sarprasBast(b) {
+  return {
+    type: b.type === 'BAPB' ? 'BAPB' : 'BAST', no_surat: str(b.no_surat, 150), pihak1: str(b.pihak1, 300), pihak2: str(b.pihak2, 300),
+    asset_name: str(b.asset_name, 300), qty: clampInt(b.qty, 1, 1, 1_000_000), date: str(b.date, 40), file: str(b.file, 500), file_link: str(b.file_link, 500),
+  };
+}
+const SARPRAS_META_LIMITS = { locations: 20000, announcement: 6000, template: 6000 };
+async function deleteMediaUrl(db, u) { if (String(u || '').startsWith('/api/media/')) await db.prepare(`DELETE FROM media WHERE id=?`).bind(u.split('/').pop()).run(); }
+async function handleSarpras(db, req, parts, method, user, body) {
+  const [, kind, id] = parts;
+  if (!canSarpras(user)) return err('Menu SI-SARPRAS khusus Waka Sarpras dan admin.', 403);
+  const t = now();
+  if (kind === 'assets' && id === 'import' && method === 'POST') {
+    const b = await body();
+    const items = (Array.isArray(b.items) ? b.items : []).slice(0, 2000).map(sarprasAsset).filter((x) => x.name);
+    if (!items.length) return err('Tidak ada data aset valid untuk diimpor.');
+    const stmts = items.map((x) => db.prepare(`INSERT INTO sarpras_assets(${SARPRAS_COLS.join(',')},created_by) VALUES(${SARPRAS_COLS.map(() => '?').join(',')},?)`)
+      .bind('ast-' + Date.now().toString(36) + randHex(4), ...SARPRAS_COLS.slice(1, -1).map((c) => x[c]), t, user.id));
+    const meta = await sarprasMeta(db);
+    const locs = [...meta.locations]; items.forEach((x) => { if (x.location && !locs.includes(x.location)) locs.push(x.location); });
+    stmts.push(db.prepare(`INSERT OR REPLACE INTO sarpras_meta(key,value) VALUES('locations',?)`).bind(JSON.stringify(locs)));
+    for (let i = 0; i < stmts.length; i += 90) await db.batch(stmts.slice(i, i + 90));
+    return json({ ok: true, count: items.length });
+  }
+  if (kind === 'assets' || kind === 'bast') {
+    const table = kind === 'assets' ? 'sarpras_assets' : 'sarpras_bast';
+    if (method === 'DELETE' && id) {
+      const old = await db.prepare(`SELECT * FROM ${table} WHERE id=?`).bind(id).first();
+      if (!old) return err('Data tidak ditemukan.', 404);
+      await db.prepare(`DELETE FROM ${table} WHERE id=?`).bind(id).run();
+      await deleteMediaUrl(db, kind === 'assets' ? old.photo : old.file);
+      return json({ ok: true });
+    }
+    if (method === 'POST' || method === 'PUT') {
+      const data = kind === 'assets' ? sarprasAsset(await body()) : sarprasBast(await body());
+      if (kind === 'assets' && (!data.name || !data.kode_tu)) return err('Nama barang dan kode TU wajib diisi.');
+      if (kind === 'bast' && (!data.no_surat || !data.pihak1 || !data.pihak2 || !data.asset_name || !data.date)) return err('Lengkapi nomor surat, pihak 1 & 2, nama barang, dan tanggal.');
+      const cols = Object.keys(data);
+      if (method === 'PUT' && id) {
+        const old = await db.prepare(`SELECT * FROM ${table} WHERE id=?`).bind(id).first();
+        if (!old) return err('Data tidak ditemukan.', 404);
+        await db.prepare(`UPDATE ${table} SET ${cols.map((c) => c + '=?').join(',')}, updated_at=? WHERE id=?`).bind(...cols.map((c) => data[c]), t, id).run();
+        const f = kind === 'assets' ? 'photo' : 'file';
+        if (old[f] && old[f] !== data[f]) await deleteMediaUrl(db, old[f]);
+        return json({ ok: true, id });
+      }
+      const nid = (kind === 'assets' ? 'ast-' : 'ST-') + Date.now().toString(36) + randHex(4);
+      await db.prepare(`INSERT INTO ${table}(id,${cols.join(',')},updated_at,created_by) VALUES(?,${cols.map(() => '?').join(',')},?,?)`).bind(nid, ...cols.map((c) => data[c]), t, user.id).run();
+      return json({ ok: true, id: nid });
+    }
+  }
+  if (kind === 'meta' && method === 'PUT') {
+    const b = await body(); const stmts = [];
+    for (const [k, lim] of Object.entries(SARPRAS_META_LIMITS)) {
+      if (!(k in b)) continue;
+      let v = b[k];
+      if (k === 'locations') v = [...new Set((Array.isArray(v) ? v : []).map((x) => str(x, 300)).filter(Boolean))];
+      else v = Object.fromEntries(Object.entries(v && typeof v === 'object' ? v : {}).map(([kk, vv]) => [str(kk, 40), str(vv, 2000)]));
+      const j = JSON.stringify(v);
+      if (j.length > lim) return err('Data terlalu panjang.');
+      stmts.push(db.prepare(`INSERT OR REPLACE INTO sarpras_meta(key,value) VALUES(?,?)`).bind(k, j));
+    }
+    if (stmts.length) await db.batch(stmts);
+    return json({ ok: true });
+  }
+  return err('Endpoint tidak ditemukan', 404);
+}
+
 const PRESTASI_ORDER = "(year IS NULL), year DESC, CASE level WHEN 'Internasional' THEN 0 WHEN 'Nasional' THEN 1 WHEN 'Provinsi' THEN 2 ELSE 3 END, sort, id DESC";
 
 // Kunci pembanding nama DUDI: huruf kecil, tanpa spasi/tanda baca ("Hotel Neo Gubeng" = "HOTEL NEO-GUBENG")
@@ -384,7 +488,7 @@ export async function onRequest(ctx) {
     // Perlindungan CSRF: permintaan yang mengubah data wajib JSON / gambar (bukan form biasa)
     if (method !== 'GET' && method !== 'HEAD') {
       const ct = (req.headers.get('Content-Type') || '').toLowerCase();
-      if (!ct.startsWith('application/json') && !ct.startsWith('image/')) return err('Content-Type tidak didukung', 415);
+      if (!ct.startsWith('application/json') && !ct.startsWith('image/') && !ct.startsWith('application/pdf')) return err('Content-Type tidak didukung', 415);
     }
     const body = async () => { try { return await req.json(); } catch { return {}; } };
 
@@ -484,6 +588,15 @@ export async function onRequest(ctx) {
         db.prepare(`SELECT COUNT(*) n FROM gallery WHERE ${where.join(' AND ')}`).bind(...args).first(),
       ]);
       return json({ items: rows.results, total: total.n, page, pages: Math.max(1, Math.ceil(total.n / limit)) });
+    }
+
+    if (method === 'GET' && parts[0] === 'sarpras' && !parts[1]) {
+      const [a, b, meta, user] = await Promise.all([
+        db.prepare(`SELECT ${SARPRAS_COLS.join(',')} FROM sarpras_assets ORDER BY updated_at DESC, id DESC LIMIT 5000`).all(),
+        db.prepare(`SELECT id,type,no_surat,pihak1,pihak2,asset_name,qty,date,file,file_link,updated_at FROM sarpras_bast ORDER BY date DESC, updated_at DESC LIMIT 2000`).all(),
+        sarprasMeta(db), currentUser(db, req),
+      ]);
+      return json({ assets: a.results, bast: b.results, ...meta, canEdit: canSarpras(user), user: user ? { name: user.name } : null }, 200, { 'Cache-Control': 'no-store' });
     }
 
     if (method === 'GET' && parts[0] === 'lowongan') {
@@ -602,7 +715,7 @@ export async function onRequest(ctx) {
     // Upload gambar (badan permintaan = file gambar mentah)
     if (parts[0] === 'media' && method === 'POST') {
       const mime = (req.headers.get('Content-Type') || '').split(';')[0];
-      if (!/^image\/(jpeg|png|webp|gif)$/.test(mime)) return err('Format gambar harus JPG, PNG, WEBP, atau GIF.');
+      if (!/^image\/(jpeg|png|webp|gif)$/.test(mime) && !(mime === 'application/pdf' && canSarpras(user))) return err('Format gambar harus JPG, PNG, WEBP, atau GIF.');
       const buf = await req.arrayBuffer();
       if (buf.byteLength > MAX_MEDIA_BYTES) return err('Ukuran gambar terlalu besar (maks ±1,9 MB setelah dikompres).');
       const id = randHex(12);
@@ -611,6 +724,7 @@ export async function onRequest(ctx) {
       return json({ ok: true, url: `/api/media/${id}` });
     }
 
+    if (parts[0] === 'sarpras') return handleSarpras(db, req, parts, method, user, body);
     if (parts[0] !== 'admin') return err('Endpoint tidak ditemukan', 404);
     const area = parts[1];
 

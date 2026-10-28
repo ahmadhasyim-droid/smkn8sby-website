@@ -210,3 +210,19 @@ npm run dev                            # buka http://localhost:8788
 
 ---
 Media sosial: Instagram **@skadela_sby** · Facebook **@smekdels** · YouTube **[SMK NEGERI 8 SURABAYA OFFICIAL](https://www.youtube.com/channel/UCX2sYNy6UZ77yifIu7dr-TQ)** · Email **email@smkn8-sby.sch.id**
+
+## SI-SARPRAS (Sistem Informasi Sarana & Prasarana)
+
+Halaman **/sarpras** menggantikan aplikasi lama `sarprassmkn8sby.web.app`. Seluruh datanya (61 aset, 46 lokasi, pengumuman, kop surat & template laporan) sudah dipindahkan otomatis saat website pertama kali diperbarui ke versi ini.
+
+| Menu | Fungsi |
+|---|---|
+| Beranda | Pengumuman + banner, statistik (total aset, baik, rusak ringan, rusak berat, dokumen BAST), grafik sebaran per lokasi & proporsi kondisi, riwayat BAST/BAPB terbaru |
+| Inventaris Aset | Cari & filter (lokasi, kondisi), QR per barang, rincian + foto. Pengelola: tambah/edit/hapus aset, unggah foto, **Impor Excel** (+ unduh template), **Kelola Lokasi** |
+| Serah Terima (BAST/BAPB) | Arsip berita acara + filter jenis. Pengelola: buat/edit/hapus, unggah berkas PDF/gambar |
+| Scan QR | Pindai stiker QR dengan kamera HP/laptop, atau cari manual dengan kode barang / kode TU |
+| Laporan & Cetak | Laporan rekapitulasi berkop surat (bisa per lokasi), **Cetak**, **Export CSV**. Pengelola: edit template & kop surat |
+
+**Siapa yang bisa mengelola:** akun **admin** dan akun **Waka Sarpras** (`waka.sarpras`, unit *Waka Sarana Prasarana*). Pengunjung lain hanya bisa melihat (sama seperti "Mode Publik" di aplikasi lama). Tombol **Login Admin** di SI-SARPRAS membuka halaman login lalu kembali otomatis ke /sarpras.
+
+Catatan: foto aset lama tetap ditautkan ke Google Drive aplikasi lama; foto & berkas baru disimpan di database website. Stiker QR baru mengarah ke `smkn8-sby.sch.id/sarpras?asset=KODE`; kode barang lama tetap sama sehingga dapat dicari lewat menu Scan QR → cari manual.

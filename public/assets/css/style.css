@@ -681,3 +681,4 @@ select.chip-btn { appearance: auto; padding-right: 10px; }
   .foot-grid { grid-template-columns: 1fr; gap: 28px; }
   .stat { padding-right: 12px; }
 }
+.sarpras-band { margin: 0 0 32px; }
