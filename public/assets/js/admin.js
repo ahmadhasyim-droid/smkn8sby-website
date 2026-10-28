@@ -47,6 +47,7 @@ const wibDate = (iso) => (iso ? new Date(new Date(iso).getTime() + 7 * 3600e3).t
 
 let ME = null, UNITS = [], UNIT = {};
 const isAdmin = () => ME.role === 'admin';
+const isBkk = () => ['bkk', 'waka-humas'].includes(ME.unit_slug); // Waka Humas setara BKK (lowongan & DUDI)
 const unitName = (slug) => (slug === 'sekolah' ? 'Sekolah (umum)' : UNIT[slug]?.name || slug);
 const unitTag = (slug) => `<span class="tag" style="--c:${slug === 'sekolah' ? '#235ba4' : UNIT[slug]?.color || '#888'}">${esc(slug === 'sekolah' ? 'Sekolah' : UNIT[slug]?.short || slug)}</span>`;
 const unitOptions = () => [{ v: 'sekolah', l: 'Sekolah (umum)' }, ...UNITS.map((u) => ({ v: u.slug, l: u.name }))];
@@ -278,7 +279,7 @@ const RES = {
     main: () => [
       { k: 'name', label: 'Nama industri / usaha', required: true },
       { k: 'address', label: 'Alamat', type: 'textarea', rows: 2 },
-      ...(isAdmin() || ME.unit_slug === 'bkk' ? [{ k: 'major', label: 'Program keahlian', type: 'select', half: true, opts: jurOptions }] : []),
+      ...(isAdmin() || isBkk() ? [{ k: 'major', label: 'Program keahlian', type: 'select', half: true, opts: jurOptions }] : []),
       { k: 'field', label: 'Bidang usaha (opsional)', placeholder: 'mis. Hotel, Salon, Percetakan, Butik', half: true },
       { k: 'website', label: 'Website / Instagram (opsional)', type: 'url', half: true },
       { k: 'sort', label: 'Urutan tampil', type: 'number', half: true, default: 0 },
@@ -315,8 +316,8 @@ function menu() {
     groups.push(['Sekolah', [['settings', 'Pengaturan Situs', 'gear'], ['users', 'Pengguna & Akses', 'users'], ['messages', 'Pesan Masuk', 'mail']]]);
   } else {
     const g = [[`units/${u}`, 'Profil Unit', 'unit']];
-    if (u === 'bkk') g.push(['lowongan', 'Lowongan Kerja', 'job']);
-    if (u === 'bkk' || UNIT[u]?.type === 'jurusan') g.push(['dudi', 'DUDI / Mitra Industri', 'handshake']);
+    if (isBkk()) g.push(['lowongan', 'Lowongan Kerja (BKK)', 'job']);
+    if (isBkk() || UNIT[u]?.type === 'jurusan') g.push(['dudi', 'DUDI / Mitra Industri', 'handshake']);
     if (u === 'lsp') g.push(['skema', 'Skema Sertifikasi', 'badge']);
     groups.push([UNIT[u]?.short || 'Unit', g]);
   }
@@ -334,7 +335,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 13</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 14</span>
       </div>
     </aside>
     <div class="main">
@@ -361,9 +362,9 @@ V.dashboard = async (view) => {
   if (d.unread !== undefined) stats.push([d.unread, 'Pesan belum dibaca', '#d2372b']);
   const quick = [...(isAdmin() || UNIT[ME.unit_slug]?.type === 'waka' ? [['program/new', 'Tambah program sekolah', 'clip']] : []), ['posts/new', 'Tulis berita / kegiatan', 'news'], ['prestasi/new', 'Tambah prestasi siswa', 'trophy'], ['agenda/new', 'Tambah agenda', 'cal'], ['gallery', 'Unggah foto galeri', 'img']];
   if (!isAdmin()) quick.push([`units/${ME.unit_slug}`, 'Perbarui profil unit', 'unit']);
-  if (isAdmin() || ME.unit_slug === 'bkk') quick.push(['lowongan/new', 'Tambah lowongan', 'job']);
+  if (isAdmin() || isBkk()) quick.push(['lowongan/new', 'Tambah lowongan', 'job']);
   if (isAdmin() || ME.unit_slug === 'lsp') quick.push(['skema/new', 'Tambah skema', 'badge']);
-  if (isAdmin() || ME.unit_slug === 'bkk' || UNIT[ME.unit_slug]?.type === 'jurusan') quick.push(['dudi/new', 'Tambah mitra DUDI', 'handshake']);
+  if (isAdmin() || isBkk() || UNIT[ME.unit_slug]?.type === 'jurusan') quick.push(['dudi/new', 'Tambah mitra DUDI', 'handshake']);
   if (isAdmin()) quick.push(['users', 'Kelola pengguna', 'users'], ['settings', 'Pengaturan situs', 'gear']);
   view.innerHTML = `
     <div class="welcome"><div><span class="mono" style="color:var(--sky)">${isAdmin() ? 'Administrator' : esc(TYPE_LABEL[un?.type] || 'Unit')}</span>
@@ -383,7 +384,7 @@ async function listView(view, key) {
   let page = 1, q = '', unit = '';
   view.innerHTML = `<div class="toolbar">
       ${['posts', 'dudi', 'prestasi'].includes(key) ? `<label class="search">${ic('search')}<input type="search" placeholder="${key === 'dudi' ? 'Cari nama industri…' : 'Cari judul…'}" id="q"></label>` : ''}
-      ${key === 'dudi' && (isAdmin() || ME.unit_slug === 'bkk') ? `<select id="fu"><option value="">Semua jurusan</option>${jurOptions().map((o) => `<option value="${o.v}">${esc(o.l)}</option>`).join('')}</select>` : ''}
+      ${key === 'dudi' && (isAdmin() || isBkk()) ? `<select id="fu"><option value="">Semua jurusan</option>${jurOptions().map((o) => `<option value="${o.v}">${esc(o.l)}</option>`).join('')}</select>` : ''}
       ${isAdmin() && ['posts', 'agenda', 'prestasi', 'program'].includes(key) ? `<select id="fu"><option value="">Semua unit</option>${unitOptions().map((o) => `<option value="${o.v}">${esc(o.l)}</option>`).join('')}</select>` : ''}
     </div><div class="table-wrap" id="tbl"></div><div class="pager" id="pg"></div>`;
   const load = async () => {
@@ -594,7 +595,7 @@ V.users = async (view) => {
       try { await api('admin/users' + (u.id ? '/' + u.id : ''), { method: u.id ? 'PUT' : 'POST', body: d }); m.remove(); toast('Pengguna tersimpan'); load(); } catch (er) { toast(er.message, true); }
     };
   };
-  view.innerHTML = `<div class="notice info"><b>Administrator</b> dapat mengelola semua isi website. <b>Pengelola unit</b> hanya dapat mengelola berita, agenda, galeri, prestasi, dan profil unitnya sendiri. <b>Waka</b> (WMM, Kurikulum, Kesiswaan, Sarpras, Humas, SDM) juga mengelola <b>Program Sekolah</b>; pengelola BKK juga lowongan, pengelola LSP juga skema.</div><div class="table-wrap" id="tbl"></div>`;
+  view.innerHTML = `<div class="notice info"><b>Administrator</b> dapat mengelola semua isi website. <b>Pengelola unit</b> hanya dapat mengelola berita, agenda, galeri, prestasi, dan profil unitnya sendiri. <b>Waka</b> (WMM, Kurikulum, Kesiswaan, Sarpras, Humas, SDM) juga mengelola <b>Program Sekolah</b>; pengelola BKK dan <b>Waka Humas</b> juga lowongan kerja & DUDI semua jurusan, pengelola LSP juga skema.</div><div class="table-wrap" id="tbl"></div>`;
   let rows = [];
   const load = async () => {
     rows = (await api('admin/users')).items;
@@ -664,9 +665,9 @@ async function route() {
     if (!a || a === 'dashboard') return await V.dashboard(view);
     if (RES[a]) {
       if (a === 'program' && !isAdmin() && UNIT[ME.unit_slug]?.type !== 'waka') throw new Error('Menu ini khusus admin dan wakil kepala sekolah.');
-      if (a === 'lowongan' && !isAdmin() && ME.unit_slug !== 'bkk') throw new Error('Menu ini khusus BKK.');
+      if (a === 'lowongan' && !isAdmin() && !isBkk()) throw new Error('Menu ini khusus BKK dan Waka Humas.');
       if (a === 'skema' && !isAdmin() && ME.unit_slug !== 'lsp') throw new Error('Menu ini khusus LSP.');
-      if (a === 'dudi' && !isAdmin() && ME.unit_slug !== 'bkk' && UNIT[ME.unit_slug]?.type !== 'jurusan') throw new Error('Menu ini khusus admin, BKK, dan pengelola jurusan.');
+      if (a === 'dudi' && !isAdmin() && !isBkk() && UNIT[ME.unit_slug]?.type !== 'jurusan') throw new Error('Menu ini khusus admin, BKK, Waka Humas, dan pengelola jurusan.');
       return b ? await editView(view, a, b === 'new' ? null : b) : await listView(view, a);
     }
     if (a === 'units') return await V.units(view, b);

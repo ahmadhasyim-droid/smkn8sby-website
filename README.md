@@ -47,6 +47,7 @@ Setiap halaman TEFA berisi: profil, **produk & layanan**, tombol **Pesan via Wha
 | **Pengelola Lembaga BKK** | Seperti di atas + **Lowongan Kerja** |
 | **Pengelola TEFA** (mis. akun TEFA Kuliner) | Berita/kegiatan, agenda, galeri, dan profil + produk/layanan **TEFA-nya sendiri** |
 | **Wakil Kepala Sekolah (Waka)** — WMM, Kurikulum, Kesiswaan, Sarpras, Humas, SDM | **Program Sekolah**, berita/kegiatan, agenda, foto kegiatan (galeri), prestasi, dan profil bidangnya sendiri |
+| **Waka Humas** (tambahan) | Seperti Waka lain, **plus Lowongan Kerja (BKK) dan DUDI semua jurusan** — setara pengelola BKK |
 
 Saran nama akun (dibuat oleh admin di menu **Pengguna & Akses**):
 

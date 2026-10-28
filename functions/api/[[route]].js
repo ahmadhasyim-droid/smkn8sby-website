@@ -338,19 +338,23 @@ const RESOURCES = {
     required: ['name'],
   },
 };
-const dudiAll = (user) => user.role === 'admin' || user.unit_slug === 'bkk';
+// Waka Humas ikut mengurus hubungan industri: aksesnya setara BKK untuk Lowongan & DUDI
+const BKK_ACCESS = new Set(['bkk', 'waka-humas']);
+const isBkk = (user) => BKK_ACCESS.has(user.unit_slug);
+const dudiAll = (user) => user.role === 'admin' || isBkk(user);
+const scopeOk = (user, scope) => (scope === 'bkk' ? isBkk(user) : user.unit_slug === scope);
 function canUseResource(user, res) {
   if (user.role === 'admin') return true;
   if (res.table === 'programs') return String(user.unit_slug || '').startsWith('waka-'); // Program Sekolah: khusus Waka
   if (res.scope === 'unit') return !!user.unit_slug;
   if (res.scope === 'major') return dudiAll(user) || JURUSAN.has(user.unit_slug);
-  return user.unit_slug === res.scope;
+  return scopeOk(user, res.scope);
 }
 function canTouchRow(user, res, row) {
   if (user.role === 'admin') return true;
   if (res.scope === 'unit') return row.unit_slug === user.unit_slug;
   if (res.scope === 'major') return dudiAll(user) || row.major === user.unit_slug;
-  return user.unit_slug === res.scope;
+  return scopeOk(user, res.scope);
 }
 function pickFields(res, body) {
   const out = {};
@@ -625,7 +629,7 @@ export async function onRequest(ctx) {
         extra.users = (await db.prepare(`SELECT COUNT(*) n FROM users`).first()).n;
         extra.unread = (await db.prepare(`SELECT COUNT(*) n FROM messages WHERE is_read=0`).first()).n;
       }
-      if (isAdmin || user.unit_slug === 'bkk') extra.lowongan = (await db.prepare(`SELECT COUNT(*) n FROM lowongan WHERE status='buka'`).first()).n;
+      if (isAdmin || isBkk(user)) extra.lowongan = (await db.prepare(`SELECT COUNT(*) n FROM lowongan WHERE status='buka'`).first()).n;
       if (isAdmin || user.unit_slug === 'lsp') extra.skema = (await db.prepare(`SELECT COUNT(*) n FROM skema`).first()).n;
       return json({ posts, agenda, gallery, views, recent: recent.results, ...extra });
     }
