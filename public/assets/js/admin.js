@@ -18,6 +18,7 @@ const P = {
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   handshake: '<path d="M11 17l2 2a1.4 1.4 0 0 0 2-2"/><path d="M14 14l2.5 2.5a1.4 1.4 0 0 0 2-2L15 11l-1.5 1.5a2 2 0 0 1-3-3L13 7l-1-1-4 4"/><path d="M2 11l4-4 3 1M22 11l-4-4h-3"/>',
   trophy: '<path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
+  clip: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6M9 18h3"/>',
   users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/>',
@@ -49,8 +50,8 @@ const isAdmin = () => ME.role === 'admin';
 const unitName = (slug) => (slug === 'sekolah' ? 'Sekolah (umum)' : UNIT[slug]?.name || slug);
 const unitTag = (slug) => `<span class="tag" style="--c:${slug === 'sekolah' ? '#235ba4' : UNIT[slug]?.color || '#888'}">${esc(slug === 'sekolah' ? 'Sekolah' : UNIT[slug]?.short || slug)}</span>`;
 const unitOptions = () => [{ v: 'sekolah', l: 'Sekolah (umum)' }, ...UNITS.map((u) => ({ v: u.slug, l: u.name }))];
-const TYPE_LABEL = { jurusan: 'Program Keahlian', lembaga: 'Lembaga', tefa: 'Teaching Factory' };
-const unitUrl = (u) => (u.type === 'lembaga' ? `/lembaga/${u.slug}` : u.type === 'tefa' ? `/tefa/${u.slug.replace(/^tefa-/, '')}` : `/jurusan/${u.slug}`);
+const TYPE_LABEL = { jurusan: 'Program Keahlian', lembaga: 'Lembaga', tefa: 'Teaching Factory', waka: 'Wakil Kepala Sekolah' };
+const unitUrl = (u) => (u.type === 'lembaga' ? `/lembaga/${u.slug}` : u.type === 'waka' ? `/waka/${u.slug.replace(/^waka-/, '')}` : u.type === 'tefa' ? `/tefa/${u.slug.replace(/^tefa-/, '')}` : `/jurusan/${u.slug}`);
 const jurOptions = () => UNITS.filter((u) => u.type === 'jurusan').map((u) => ({ v: u.slug, l: u.name }));
 
 // ---------- Unggah gambar (otomatis diperkecil di browser) ----------
@@ -221,6 +222,26 @@ const RES = {
       { k: 'logo', label: 'Logo perusahaan', type: 'logo' },
     ],
   },
+  program: {
+    title: 'Program Sekolah', single: 'program', icon: 'clip',
+    cols: [
+      ['', (r) => (r.image ? `<img class="thumb" src="${esc(r.image)}" alt="">` : `<span class="thumb" style="display:block"></span>`)],
+      ['Program', (r) => `<span class="t-title">${esc(r.title)}</span><span class="t-sub">${esc(r.period || '')}${r.summary ? ' · ' + esc(r.summary.slice(0, 80)) : ''}</span>`],
+      ['Status', (r) => `<span class="tag ${r.status === 'selesai' ? 'draft' : 'ok'}">${esc({ rencana: 'Rencana', berjalan: 'Berjalan', selesai: 'Selesai' }[r.status] || r.status || '-')}</span>`],
+      ['Unit', (r) => unitTag(r.unit_slug)],
+    ],
+    main: () => [
+      { k: 'title', label: 'Nama program', required: true },
+      { k: 'summary', label: 'Ringkasan singkat', type: 'textarea', rows: 2, help: 'Tampil di daftar program (1–2 kalimat).' },
+      { k: 'period', label: 'Waktu / periode', placeholder: 'mis. Tahun Pelajaran 2026/2027, Semester Ganjil', half: true },
+      { k: 'status', label: 'Status', type: 'select', half: true, opts: () => [{ v: 'berjalan', l: 'Berjalan' }, { v: 'rencana', l: 'Rencana' }, { v: 'selesai', l: 'Selesai' }] },
+      ...(isAdmin() ? [{ k: 'unit_slug', label: 'Pengelola program', type: 'select', half: true, opts: unitOptions, default: 'sekolah' }] : []),
+      { k: 'sort', label: 'Urutan tampil', type: 'number', half: true, default: 0 },
+      { k: 'description', label: 'Uraian program (tujuan, sasaran, kegiatan, indikator)', type: 'textarea', rows: 7 },
+      { k: 'image', label: 'Gambar / dokumentasi (opsional)', type: 'image' },
+    ],
+    view: (r) => '/program',
+  },
   prestasi: {
     title: 'Prestasi Siswa', single: 'prestasi', icon: 'trophy',
     cols: [
@@ -287,9 +308,10 @@ const RES = {
 // ---------- Kerangka panel ----------
 function menu() {
   const u = ME.unit_slug, items = [['dashboard', 'Dasbor', 'dash'], ['posts', 'Berita & Kegiatan', 'news'], ['agenda', 'Agenda', 'cal'], ['gallery', 'Galeri', 'img'], ['prestasi', 'Prestasi Siswa', 'trophy']];
+  if (isAdmin() || UNIT[u]?.type === 'waka') items.splice(1, 0, ['program', 'Program Sekolah', 'clip']);
   const groups = [['Konten', items]];
   if (isAdmin()) {
-    groups.push(['Unit', [['units', 'Profil Jurusan, Lembaga & TEFA', 'unit'], ['dudi', 'DUDI / Mitra Industri', 'handshake'], ['lowongan', 'Lowongan (BKK)', 'job'], ['skema', 'Skema (LSP)', 'badge']]]);
+    groups.push(['Unit', [['units', 'Profil Unit & Waka', 'unit'], ['dudi', 'DUDI / Mitra Industri', 'handshake'], ['lowongan', 'Lowongan (BKK)', 'job'], ['skema', 'Skema (LSP)', 'badge']]]);
     groups.push(['Sekolah', [['settings', 'Pengaturan Situs', 'gear'], ['users', 'Pengguna & Akses', 'users'], ['messages', 'Pesan Masuk', 'mail']]]);
   } else {
     const g = [[`units/${u}`, 'Profil Unit', 'unit']];
@@ -312,7 +334,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 12</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 13</span>
       </div>
     </aside>
     <div class="main">
@@ -337,7 +359,7 @@ V.dashboard = async (view) => {
   if (d.skema !== undefined) stats.push([d.skema, 'Skema sertifikasi', '#e3262b']);
   if (d.users !== undefined) stats.push([d.users, 'Pengguna', '#24282e']);
   if (d.unread !== undefined) stats.push([d.unread, 'Pesan belum dibaca', '#d2372b']);
-  const quick = [['posts/new', 'Tulis berita / kegiatan', 'news'], ['prestasi/new', 'Tambah prestasi siswa', 'trophy'], ['agenda/new', 'Tambah agenda', 'cal'], ['gallery', 'Unggah foto galeri', 'img']];
+  const quick = [...(isAdmin() || UNIT[ME.unit_slug]?.type === 'waka' ? [['program/new', 'Tambah program sekolah', 'clip']] : []), ['posts/new', 'Tulis berita / kegiatan', 'news'], ['prestasi/new', 'Tambah prestasi siswa', 'trophy'], ['agenda/new', 'Tambah agenda', 'cal'], ['gallery', 'Unggah foto galeri', 'img']];
   if (!isAdmin()) quick.push([`units/${ME.unit_slug}`, 'Perbarui profil unit', 'unit']);
   if (isAdmin() || ME.unit_slug === 'bkk') quick.push(['lowongan/new', 'Tambah lowongan', 'job']);
   if (isAdmin() || ME.unit_slug === 'lsp') quick.push(['skema/new', 'Tambah skema', 'badge']);
@@ -362,7 +384,7 @@ async function listView(view, key) {
   view.innerHTML = `<div class="toolbar">
       ${['posts', 'dudi', 'prestasi'].includes(key) ? `<label class="search">${ic('search')}<input type="search" placeholder="${key === 'dudi' ? 'Cari nama industri…' : 'Cari judul…'}" id="q"></label>` : ''}
       ${key === 'dudi' && (isAdmin() || ME.unit_slug === 'bkk') ? `<select id="fu"><option value="">Semua jurusan</option>${jurOptions().map((o) => `<option value="${o.v}">${esc(o.l)}</option>`).join('')}</select>` : ''}
-      ${isAdmin() && ['posts', 'agenda', 'prestasi'].includes(key) ? `<select id="fu"><option value="">Semua unit</option>${unitOptions().map((o) => `<option value="${o.v}">${esc(o.l)}</option>`).join('')}</select>` : ''}
+      ${isAdmin() && ['posts', 'agenda', 'prestasi', 'program'].includes(key) ? `<select id="fu"><option value="">Semua unit</option>${unitOptions().map((o) => `<option value="${o.v}">${esc(o.l)}</option>`).join('')}</select>` : ''}
     </div><div class="table-wrap" id="tbl"></div><div class="pager" id="pg"></div>`;
   const load = async () => {
     const d = await api(`admin/${key}?page=${page}&limit=20${q ? '&q=' + encodeURIComponent(q) : ''}${unit ? '&unit=' + unit : ''}`);
@@ -458,7 +480,7 @@ V.gallery = async (view) => {
 V.units = async (view, slug) => {
   if (!slug) {
     if (!isAdmin()) { location.hash = `#/units/${ME.unit_slug}`; return; }
-    setHead('Profil Jurusan, Lembaga & TEFA');
+    setHead('Profil Unit & Wakil Kepala Sekolah');
     view.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Unit</th><th>Jenis</th><th></th></tr></thead><tbody>${UNITS.map((u) => `<tr>
       <td><span style="display:flex;gap:10px;align-items:center"><span style="width:12px;height:36px;border-radius:3px;background:${u.color}"></span><span><span class="t-title">${esc(u.name)}</span><span class="t-sub">${esc(u.short)}</span></span></span></td>
       <td>${TYPE_LABEL[u.type] || u.type}${u.parent && UNIT[u.parent] ? `<br><span class="t-sub">Induk: ${esc(UNIT[u.parent].name)}</span>` : ''}</td>
@@ -467,7 +489,7 @@ V.units = async (view, slug) => {
     return;
   }
   const { unit } = await api('admin/units/' + slug);
-  const isJur = unit.type === 'jurusan', isTefa = unit.type === 'tefa';
+  const isJur = unit.type === 'jurusan', isTefa = unit.type === 'tefa', isWaka = unit.type === 'waka';
   setHead(`Profil ${unit.name}`, `<a class="btn btn-line" href="${unitUrl(unit)}" target="_blank">${ic('ext')}Lihat halaman</a>`);
   const main = [
     { k: 'name', label: 'Nama', required: true, half: true }, { k: 'short', label: 'Singkatan', half: true, max: 20 },
@@ -475,14 +497,14 @@ V.units = async (view, slug) => {
     { k: 'video', label: 'Link video profil YouTube (opsional)', type: 'url', placeholder: 'https://www.youtube.com/watch?v=…', help: 'Tampil di bagian atas profil. Salin link video dari YouTube.' },
     { k: 'description', label: 'Profil / deskripsi', type: 'textarea', rows: 6 },
     { k: 'visi', label: 'Visi', type: 'textarea', rows: 2, half: true }, { k: 'misi', label: 'Misi (satu baris satu poin)', type: 'textarea', rows: 2, half: true },
-    { k: 'kompetensi', label: isJur ? 'Kompetensi yang dipelajari (satu baris satu poin)' : isTefa ? 'Produk & layanan (satu baris satu poin)' : 'Layanan (satu baris satu poin)', type: 'textarea', rows: 6 },
+    { k: 'kompetensi', label: isJur ? 'Kompetensi yang dipelajari (satu baris satu poin)' : isTefa ? 'Produk & layanan (satu baris satu poin)' : isWaka ? 'Tugas & fungsi (satu baris satu poin)' : 'Layanan (satu baris satu poin)', type: 'textarea', rows: 6 },
     ...(isJur ? [{ k: 'prospek', label: 'Prospek karier lulusan (satu baris satu poin)', type: 'textarea', rows: 5 }] : []),
   ];
   const side = [
     { k: 'color', label: 'Warna identitas', type: 'color' },
     { k: 'logo', label: 'Logo', type: 'logo', help: 'PNG latar transparan paling bagus.' },
     { k: 'cover', label: 'Foto sampul halaman', type: 'image' },
-    { k: 'head_name', label: isJur ? 'Nama Kaprog / Kakomli' : isTefa ? 'Nama manajer TEFA' : 'Nama ketua / penanggung jawab' },
+    { k: 'head_name', label: isJur ? 'Nama Kaprog / Kakomli' : isTefa ? 'Nama manajer TEFA' : isWaka ? 'Nama wakil kepala sekolah' : 'Nama ketua / penanggung jawab' },
     { k: 'head_title', label: 'Jabatan' },
     { k: 'head_photo', label: 'Foto', type: 'logo' },
     { k: 'phone', label: isTefa ? 'No. WhatsApp pemesanan' : 'No. WhatsApp', help: isTefa ? 'Akan muncul tombol "Pesan via WhatsApp" di halaman TEFA.' : '' }, { k: 'email', label: 'Email', type: 'email' }, { k: 'instagram', label: 'Instagram (tanpa @)' },
@@ -549,12 +571,12 @@ V.settings = async (view) => {
 // Pengguna & hak akses
 V.users = async (view) => {
   setHead('Pengguna & Akses', `<button class="btn btn-primary" id="addU">${ic('plus')}Tambah pengguna</button>`);
-  const roleOpts = () => [{ v: 'unit', l: 'Pengelola Jurusan / Lembaga / TEFA' }, { v: 'admin', l: 'Administrator (semua akses)' }];
+  const roleOpts = () => [{ v: 'unit', l: 'Pengelola Unit (Waka / Jurusan / Lembaga / TEFA)' }, { v: 'admin', l: 'Administrator (semua akses)' }];
   const form = (u = {}) => [
     { k: 'name', label: 'Nama lengkap', required: true },
     ...(u.id ? [] : [{ k: 'username', label: 'Username (untuk login)', required: true, help: 'Huruf kecil, angka, titik atau strip. Contoh: kuliner, mm.operator' }]),
     { k: 'role', label: 'Peran', type: 'select', opts: roleOpts, default: 'unit', half: true },
-    { k: 'unit_slug', label: 'Jurusan / lembaga / TEFA', type: 'select', opts: () => UNITS.map((x) => ({ v: x.slug, l: `${x.name} (${TYPE_LABEL[x.type] || x.type})` })), half: true },
+    { k: 'unit_slug', label: 'Unit yang dikelola', type: 'select', opts: () => UNITS.map((x) => ({ v: x.slug, l: `${x.name} (${TYPE_LABEL[x.type] || x.type})` })), half: true },
     { k: 'password', label: u.id ? 'Password baru (kosongkan bila tidak diganti)' : 'Password', type: 'password', required: !u.id, help: 'Minimal 8 karakter.' },
     ...(u.id ? [{ k: 'active', label: 'Akun aktif', type: 'check' }] : []),
   ];
@@ -572,7 +594,7 @@ V.users = async (view) => {
       try { await api('admin/users' + (u.id ? '/' + u.id : ''), { method: u.id ? 'PUT' : 'POST', body: d }); m.remove(); toast('Pengguna tersimpan'); load(); } catch (er) { toast(er.message, true); }
     };
   };
-  view.innerHTML = `<div class="notice info"><b>Administrator</b> dapat mengelola semua isi website. <b>Pengelola jurusan/lembaga/TEFA</b> hanya dapat mengelola berita, agenda, galeri, dan profil unitnya sendiri (pengelola BKK juga lowongan, pengelola LSP juga skema).</div><div class="table-wrap" id="tbl"></div>`;
+  view.innerHTML = `<div class="notice info"><b>Administrator</b> dapat mengelola semua isi website. <b>Pengelola unit</b> hanya dapat mengelola berita, agenda, galeri, prestasi, dan profil unitnya sendiri. <b>Waka</b> (WMM, Kurikulum, Kesiswaan, Sarpras, Humas, SDM) juga mengelola <b>Program Sekolah</b>; pengelola BKK juga lowongan, pengelola LSP juga skema.</div><div class="table-wrap" id="tbl"></div>`;
   let rows = [];
   const load = async () => {
     rows = (await api('admin/users')).items;
@@ -641,6 +663,7 @@ async function route() {
   try {
     if (!a || a === 'dashboard') return await V.dashboard(view);
     if (RES[a]) {
+      if (a === 'program' && !isAdmin() && UNIT[ME.unit_slug]?.type !== 'waka') throw new Error('Menu ini khusus admin dan wakil kepala sekolah.');
       if (a === 'lowongan' && !isAdmin() && ME.unit_slug !== 'bkk') throw new Error('Menu ini khusus BKK.');
       if (a === 'skema' && !isAdmin() && ME.unit_slug !== 'lsp') throw new Error('Menu ini khusus LSP.');
       if (a === 'dudi' && !isAdmin() && ME.unit_slug !== 'bkk' && UNIT[ME.unit_slug]?.type !== 'jurusan') throw new Error('Menu ini khusus admin, BKK, dan pengelola jurusan.');

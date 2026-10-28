@@ -320,6 +320,11 @@ const RESOURCES = {
     fields: { code: 60, name: 200, major: 40, level: 60, units_count: 'int', description: 2000, sort: 'int' },
     required: ['name'],
   },
+  program: {
+    table: 'programs', scope: 'unit', order: "unit_slug, sort, id DESC",
+    fields: { title: 200, summary: 400, description: 5000, period: 80, status: 20, image: 300, unit_slug: 40, sort: 'int' },
+    required: ['title'],
+  },
   prestasi: {
     table: 'prestasi', scope: 'unit', order: PRESTASI_ORDER,
     fields: { title: 250, field: 200, rank: 120, level: 30, level_detail: 150, date_text: 80, year: 'int', students: 3000, unit_slug: 40,
@@ -336,6 +341,7 @@ const RESOURCES = {
 const dudiAll = (user) => user.role === 'admin' || user.unit_slug === 'bkk';
 function canUseResource(user, res) {
   if (user.role === 'admin') return true;
+  if (res.table === 'programs') return String(user.unit_slug || '').startsWith('waka-'); // Program Sekolah: khusus Waka
   if (res.scope === 'unit') return !!user.unit_slug;
   if (res.scope === 'major') return dudiAll(user) || JURUSAN.has(user.unit_slug);
   return user.unit_slug === res.scope;
@@ -393,7 +399,7 @@ export async function onRequest(ctx) {
         db.prepare(`SELECT slug,type,name,short,tagline,color,icon,logo,cover,parent,sort FROM units ORDER BY sort`).all(),
         db.prepare(`SELECT (SELECT COUNT(*) FROM posts WHERE status='publish') posts,
           (SELECT COUNT(*) FROM lowongan WHERE status='buka') lowongan, (SELECT COUNT(*) FROM skema) skema,
-          (SELECT COUNT(DISTINCT nkey) FROM dudi) dudi, (SELECT COUNT(*) FROM prestasi) prestasi`).first(),
+          (SELECT COUNT(DISTINCT nkey) FROM dudi) dudi, (SELECT COUNT(*) FROM prestasi) prestasi, (SELECT COUNT(*) FROM programs) programs`).first(),
       ]);
       const settings = Object.fromEntries(s.results.filter((r) => !PRIVATE_SETTINGS.includes(r.key)).map((r) => [r.key, r.value]));
       settings.ig_connected = s.results.some((r) => (r.key === 'ig_token' || r.key === 'ig_feed_url') && r.value) ? '1' : '';
@@ -483,6 +489,13 @@ export async function onRequest(ctx) {
       const limit = clampInt(q.get('limit'), 50, 1, 100);
       const rows = await db.prepare(`SELECT * FROM lowongan WHERE ${where.join(' AND ')} ORDER BY ${RESOURCES.lowongan.order} LIMIT ?`).bind(...args, limit).all();
       return json({ items: rows.results });
+    }
+
+    if (method === 'GET' && parts[0] === 'program') {
+      const where = ['1=1']; const args = [];
+      if (q.get('unit')) { where.push('unit_slug=?'); args.push(q.get('unit')); }
+      const rows = await db.prepare(`SELECT * FROM programs WHERE ${where.join(' AND ')} ORDER BY CASE status WHEN 'berjalan' THEN 0 WHEN 'rencana' THEN 1 ELSE 2 END, sort, id DESC LIMIT 300`).bind(...args).all();
+      return json({ items: rows.results }, 200, { 'Cache-Control': 'public, max-age=60' });
     }
 
     if (method === 'GET' && parts[0] === 'prestasi') {
@@ -760,6 +773,7 @@ export async function onRequest(ctx) {
         if (res.scope === 'major' && !dudiAll(user)) data.major = user.unit_slug;
         if (res.scope === 'major' && 'major' in data && !JURUSAN.has(data.major)) return err('Pilih program keahlian.');
         if (area === 'dudi' && data.name) data.nkey = dudiKey(data.name);
+        if (area === 'program' && data.status && !['rencana', 'berjalan', 'selesai'].includes(data.status)) data.status = 'berjalan';
         if (method === 'POST') for (const r of res.required) if (!data[r]) return err(`Kolom "${r}" wajib diisi.`);
         if (method === 'PUT') for (const r of res.required) if (r in data && !data[r]) return err(`Kolom "${r}" wajib diisi.`);
 

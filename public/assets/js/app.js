@@ -15,6 +15,13 @@ const ICONS = {
   lsp: '<circle cx="12" cy="9" r="5.5"/><path d="M9.5 9l1.8 1.8L15 7.2"/><path d="M8.5 13.8L7 21l5-2.8 5 2.8-1.5-7.2"/>',
   dkv: '<path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.6 7.6"/><circle cx="11" cy="11" r="2"/>',
   factory: '<path d="M2 20h20"/><path d="M4 20V9l5 3V9l5 3V9l5 3v8"/><path d="M19 12V4h2v16"/><path d="M8 16h2M13 16h2"/>',
+  wmm: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+  kurikulum: '<path d="M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2z"/><path d="M22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z"/>',
+  kesiswaan: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2a5 5 0 0 1 5.5 5.8"/>',
+  sarpras: '<path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21v-5h6v5"/><path d="M9 10h.01M15 10h.01M12 10h.01"/>',
+  humas: '<path d="M3 11v2a2 2 0 0 0 2 2h2l5 4V5L7 9H5a2 2 0 0 0-2 2z"/><path d="M16 8a5 5 0 0 1 0 8M19 5a9 9 0 0 1 0 14"/>',
+  sdm: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2.5"/><path d="M5.5 17a3.5 3.5 0 0 1 7 0"/><path d="M15 9h3M15 13h3"/>',
+  clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6M9 18h3"/>',
   bkk: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/><path d="M11 13v2h2v-2"/>',
   sekolah: '<path d="M3 10l9-5 9 5-9 5z"/><path d="M7 12.2V17c0 1.1 2.2 2.5 5 2.5s5-1.4 5-2.5v-4.8"/><path d="M21 10v5"/>',
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
@@ -65,8 +72,13 @@ const params = new URLSearchParams(location.search);
 let SITE = null; let UNITS = {};
 const SCHOOL_UNIT = { slug: 'sekolah', name: 'Sekolah', short: 'SMKN 8', color: '#235ba4', icon: 'sekolah', type: 'sekolah' };
 const unitOf = (slug) => UNITS[slug] || SCHOOL_UNIT;
-const unitUrl = (u) => (u.type === 'lembaga' ? `/lembaga/${u.slug}` : u.type === 'tefa' ? `/tefa/${u.slug.replace(/^tefa-/, '')}` : u.type === 'jurusan' ? `/jurusan/${u.slug}` : '/profil');
-const TYPE_LABEL = { jurusan: 'Program Keahlian', lembaga: 'Lembaga', tefa: 'Teaching Factory' };
+const unitUrl = (u) => (u.type === 'lembaga' ? `/lembaga/${u.slug}` : u.type === 'waka' ? `/waka/${u.slug.replace(/^waka-/, '')}` : u.type === 'tefa' ? `/tefa/${u.slug.replace(/^tefa-/, '')}` : u.type === 'jurusan' ? `/jurusan/${u.slug}` : '/profil');
+const TYPE_LABEL = { jurusan: 'Program Keahlian', lembaga: 'Lembaga', tefa: 'Teaching Factory', waka: 'Wakil Kepala Sekolah' };
+// Pilihan unit (dropdown berkelompok) untuk filter berita, agenda & galeri
+const unitSelect = (cur, all = 'Semua unit') => {
+  const grp = (t, label) => { const us = Object.values(UNITS).filter((u) => u.type === t); return us.length ? `<optgroup label="${label}">${us.map((u) => `<option value="${u.slug}"${u.slug === cur ? ' selected' : ''}>${esc(u.name)}</option>`).join('')}</optgroup>` : ''; };
+  return `<select class="chip-btn unit-select" aria-label="Pilih unit"><option value="">${all}</option><option value="sekolah"${cur === 'sekolah' ? ' selected' : ''}>Sekolah (umum)</option>${grp('waka', 'Wakil Kepala Sekolah')}${grp('jurusan', 'Program Keahlian')}${grp('lembaga', 'Lembaga')}${grp('tefa', 'Teaching Factory')}</select>`;
+};
 const chipLabel = (u) => (u.type === 'jurusan' ? u.name : u.short || u.name);
 const unitMark = (u, cls = 'ico') => (u.logo ? `<img src="${esc(u.logo)}" alt="Logo ${esc(u.name)}" loading="lazy">` : icon(u.icon || u.slug, cls));
 
@@ -169,9 +181,10 @@ function renderShell() {
     <nav class="nav" id="nav" aria-label="Menu utama">
       <button class="nav-toggle nav-close" aria-label="Tutup menu">${icon('x')}</button>
       <a href="/"${act('home')}>Beranda</a>
-      <div class="dd"><button aria-haspopup="true"${['profil', 'perpustakaan'].includes(page) ? ' class="active"' : ''}>Profil ${icon('chev')}</button><div class="dd-panel">
+      <div class="dd"><button aria-haspopup="true"${['profil', 'perpustakaan', 'program'].includes(page) ? ' class="active"' : ''}>Profil ${icon('chev')}</button><div class="dd-panel">
         ${ddLink('/profil', 'Profil Sekolah', 'Sambutan, sejarah, visi & misi', 'sekolah', '#235ba4')}
         ${s.profile_video ? ddLink('/profil#video', 'Video Profil', 'Kenali SMKN 8 Surabaya lewat video', 'play', '#f26836') : ''}
+        ${ddLink('/program', 'Program Sekolah', 'Program kerja wakil kepala sekolah', 'clipboard', '#1d4ed8')}
         ${ddLink('/perpustakaan', 'Perpustakaan', 'Profil & layanan perpustakaan', 'book', '#16966a')}
         ${ddLink('/dudi', 'DUDI / Mitra Industri', 'Industri yang bekerja sama', 'handshake', '#7c4bc4')}
       </div></div>
@@ -219,7 +232,7 @@ function renderShell() {
         ${s.spmb_link ? `<li><a href="${esc(safeUrl(s.spmb_link))}" target="_blank" rel="noopener">Info SPMB / PPDB</a></li>` : ''}</ul></div>
       ${tefa.length ? `<div><h4>Teaching Factory</h4><ul>${tefa.map((u) => `<li><a href="${unitUrl(u)}">${esc(u.name)}</a></li>`).join('')}</ul></div>` : ''}
       <div><h4>Jelajahi</h4><ul>
-        <li><a href="/profil">Profil Sekolah</a></li><li><a href="/dudi">DUDI / Mitra Industri</a></li><li><a href="/perpustakaan">Perpustakaan</a></li><li><a href="/prestasi">Prestasi Siswa</a></li><li><a href="/berita">Berita & Kegiatan</a></li>
+        <li><a href="/profil">Profil Sekolah</a></li><li><a href="/program">Program Sekolah</a></li><li><a href="/dudi">DUDI / Mitra Industri</a></li><li><a href="/perpustakaan">Perpustakaan</a></li><li><a href="/prestasi">Prestasi Siswa</a></li><li><a href="/berita">Berita & Kegiatan</a></li>
         <li><a href="/agenda">Agenda</a></li><li><a href="/galeri">Galeri</a></li><li><a href="/kontak">Kontak</a></li>
         <li><a href="/admin/">Login Pengelola</a></li></ul></div>
     </div>
@@ -507,15 +520,15 @@ PAGES.profil = async (main) => {
 // ---------- Halaman Jurusan / Lembaga ----------
 PAGES.unit = async (main) => {
   const segs = location.pathname.split('/').filter(Boolean);
-  const slug = params.get('u') || (segs[0] === 'tefa' ? 'tefa-' + segs.pop() : segs.pop());
+  const slug = params.get('u') || (segs[0] === 'tefa' ? 'tefa-' + segs.pop() : segs[0] === 'waka' ? 'waka-' + segs.pop() : segs.pop());
   let unit;
   try { unit = (await api('units/' + encodeURIComponent(slug))).unit; } catch { return notFound(main); }
   setTitle(unit.name);
   document.body.style.setProperty('--unit', unit.color);
-  const isJur = unit.type === 'jurusan', isTefa = unit.type === 'tefa', isBKK = slug === 'bkk', isLSP = slug === 'lsp';
+  const isJur = unit.type === 'jurusan', isTefa = unit.type === 'tefa', isWaka = unit.type === 'waka', isBKK = slug === 'bkk', isLSP = slug === 'lsp';
   const parent = isTefa ? UNITS[unit.parent] : null;
   const myTefa = isJur ? Object.values(UNITS).find((u) => u.type === 'tefa' && u.parent === slug) : null;
-  const tabs = [['profil', 'Profil'], [isLSP ? 'skema' : isBKK ? 'lowongan' : isTefa ? 'layanan' : 'kompetensi', isLSP ? 'Skema Sertifikasi' : isBKK ? 'Lowongan Kerja' : isTefa ? 'Produk & Layanan' : 'Kompetensi'],
+  const tabs = [['profil', 'Profil'], [isLSP ? 'skema' : isBKK ? 'lowongan' : isTefa ? 'layanan' : isWaka ? 'program' : 'kompetensi', isLSP ? 'Skema Sertifikasi' : isBKK ? 'Lowongan Kerja' : isTefa ? 'Produk & Layanan' : isWaka ? 'Program Kerja' : 'Kompetensi'],
     ...(isJur ? [['dudi', 'Mitra DUDI'], ['prestasi', 'Prestasi']] : []), ['kegiatan', 'Kegiatan'], ['agenda', 'Agenda'], ['galeri', 'Galeri']];
   const others = Object.values(UNITS).filter((u) => u.slug !== slug);
   const komp = lines(unit.kompetensi), prospek = lines(unit.prospek);
@@ -543,6 +556,8 @@ PAGES.unit = async (main) => {
                  <div class="unit-block"><h2>Layanan LSP</h2><div class="check-grid">${komp.map((k, i) => `<div><span class="n">${String(i + 1).padStart(2, '0')}</span>${esc(k)}</div>`).join('')}</div></div>` : ''}
       ${isTefa ? `<div class="unit-block" id="layanan"><h2>Produk & Layanan</h2><div class="svc-grid">${komp.map((k, i) => `<div><span class="n">${String(i + 1).padStart(2, '0')}</span><b>${esc(k)}</b></div>`).join('') || empty('Belum diisi.')}</div>
         ${unit.phone ? `<div class="order-band"><div><b>Ingin memesan atau reservasi?</b><span>Hubungi ${esc(unit.name)} melalui WhatsApp.</span></div><a class="btn btn-orange" href="${waLink(unit.phone)}?text=${encodeURIComponent('Halo ' + unit.name + ' SMKN 8 Surabaya, saya ingin bertanya/memesan:')}" target="_blank" rel="noopener">${icon('wa')} Pesan via WhatsApp</a></div>` : ''}</div>` : ''}
+      ${isWaka ? `<div class="unit-block" id="program"><h2>Program Kerja</h2><div class="prog-list" id="unitProg"></div></div>
+        <div class="unit-block"><h2>Tugas & Fungsi</h2><div class="check-grid">${komp.map((k, i) => `<div><span class="n">${String(i + 1).padStart(2, '0')}</span>${esc(k)}</div>`).join('') || empty('Belum diisi.')}</div></div>` : ''}
       ${isJur ? `<div class="unit-block" id="kompetensi"><h2>Kompetensi yang Dipelajari</h2><div class="check-grid">${komp.map((k, i) => `<div><span class="n">${String(i + 1).padStart(2, '0')}</span>${esc(k)}</div>`).join('') || empty('Belum diisi.')}</div>
         ${prospek.length ? `<h3 class="mono" style="margin:28px 0 12px;color:var(--muted)">Prospek karier lulusan</h3><div class="pill-list">${prospek.map((p) => `<span>${esc(p)}</span>`).join('')}</div>` : ''}
         <div id="jurLinks"></div></div>
@@ -557,7 +572,7 @@ PAGES.unit = async (main) => {
     <aside>
       ${myTefa ? `<a class="side-card tefa-link" href="${unitUrl(myTefa)}" style="--c:${myTefa.color}"><h4>Teaching Factory</h4><span class="head-card"><span class="av">${icon('factory')}</span><span><b>${esc(myTefa.name)}</b><span>${esc(myTefa.tagline || '')}</span></span></span></a>` : ''}
       ${parent ? `<a class="side-card tefa-link" href="${unitUrl(parent)}" style="--c:${parent.color}"><h4>Program keahlian induk</h4><span class="head-card"><span class="av">${unitMark(parent)}</span><span><b>${esc(parent.name)}</b><span>Lihat program keahlian →</span></span></span></a>` : ''}
-      ${unit.head_name ? `<div class="side-card"><h4>${isJur ? 'Ketua Program Keahlian' : isTefa ? 'Manajer TEFA' : 'Penanggung Jawab'}</h4><div class="head-card"><span class="av">${unit.head_photo ? `<img src="${esc(unit.head_photo)}" alt="">` : esc(unit.head_name.trim()[0] || '?')}</span><span><b>${esc(unit.head_name)}</b><span>${esc(unit.head_title || '')}</span></span></div></div>` : ''}
+      ${unit.head_name ? `<div class="side-card"><h4>${isJur ? 'Ketua Program Keahlian' : isTefa ? 'Manajer TEFA' : isWaka ? 'Wakil Kepala Sekolah' : 'Penanggung Jawab'}</h4><div class="head-card"><span class="av">${unit.head_photo ? `<img src="${esc(unit.head_photo)}" alt="">` : esc(unit.head_name.trim()[0] || '?')}</span><span><b>${esc(unit.head_name)}</b><span>${esc(unit.head_title || '')}</span></span></div></div>` : ''}
       <div class="side-card"><h4>Kontak ${esc(unit.short || '')}</h4><div class="contact-list">
         ${unit.phone ? `<a href="${waLink(unit.phone)}" target="_blank" rel="noopener">${icon('wa')}${esc(unit.phone)}</a>` : ''}
         ${unit.email ? `<a href="mailto:${esc(unit.email)}">${icon('mail')}${esc(unit.email)}</a>` : ''}
@@ -575,6 +590,7 @@ PAGES.unit = async (main) => {
   $$('.unit-block[id]').forEach((b) => io.observe(b));
 
   if (isJur) api('prestasi?unit=' + slug + '&limit=6').then((d) => { PRES_CACHE = d.items; $('#unitPres').innerHTML = d.items.length ? d.items.map(presCard).join('') : empty('Belum ada data prestasi.'); }).catch(() => {});
+  if (isWaka) api('program?unit=' + slug).then((d) => { $('#unitProg').innerHTML = d.items.length ? d.items.map((p) => programCard(p, true)).join('') : empty('Program kerja belum diisi.'); }).catch(() => {});
   const [news, agenda, gal] = await Promise.all([api(`posts?unit=${slug}&limit=4`), api(`agenda?unit=${slug}&limit=8`), api(`gallery?unit=${slug}&limit=12`)]);
   $('#unitNews').innerHTML = news.items.length ? news.items.map((p) => postCard(p)).join('') : `<div style="grid-column:1/-1">${empty('Belum ada kegiatan yang dipublikasikan.')}</div>`;
   $('#unitAgenda').innerHTML = agenda.items.length ? agenda.items.map((a) => agendaItem(a, (a.end_date || a.date) < agenda.today)).join('') : empty('Belum ada agenda.');
@@ -645,7 +661,7 @@ PAGES.berita = async (main) => {
     const p = new URLSearchParams(); if (unit) p.set('unit', unit); if (cat) p.set('kategori', cat); if (q) p.set('q', q); if (page > 1) p.set('page', page);
     history.replaceState(null, '', '/berita' + (p.toString() ? '?' + p : ''));
   };
-  $('#fUnit').innerHTML = [['', 'Semua unit', '#0d1a2e'], ...units.map((u) => [u.slug, chipLabel(u), u.color])].map(([v, l, c]) => `<button class="chip-btn${v === unit ? ' on' : ''}" data-v="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)}</button>`).join('');
+  $('#fUnit').innerHTML = unitSelect(unit);
   $('#fCat').innerHTML = [['', 'Semua kategori'], ...Object.entries(CATS)].map(([v, l]) => `<button class="chip-btn${v === cat ? ' on' : ''}" data-v="${v}">${esc(l)}</button>`).join('') +
     `<label class="search">${icon('search')}<input id="q" type="search" placeholder="Cari berita…" value="${esc(q)}" aria-label="Cari berita"></label>`;
   const load = async () => {
@@ -654,7 +670,7 @@ PAGES.berita = async (main) => {
     $('#list').innerHTML = d.items.length ? d.items.map((p) => postCard(p)).join('') : `<div style="grid-column:1/-1">${empty('Tidak ada berita yang cocok.')}</div>`;
     $('#pager').innerHTML = d.pages > 1 ? `<button ${page <= 1 ? 'disabled' : ''} data-p="${page - 1}">‹</button>${Array.from({ length: d.pages }, (_, i) => `<button class="${i + 1 === page ? 'on' : ''}" data-p="${i + 1}">${i + 1}</button>`).join('')}<button ${page >= d.pages ? 'disabled' : ''} data-p="${page + 1}">›</button>` : '';
   };
-  $('#fUnit').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; unit = b.dataset.v; page = 1; $$('#fUnit button').forEach((x) => x.classList.toggle('on', x === b)); load(); };
+  $('#fUnit').onchange = (e) => { unit = e.target.value; page = 1; load(); };
   $('#fCat').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; cat = b.dataset.v; page = 1; $$('#fCat button').forEach((x) => x.classList.toggle('on', x === b)); load(); };
   let t; $('#q').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { q = e.target.value.trim(); page = 1; load(); }, 350); };
   $('#pager').onclick = (e) => { const b = e.target.closest('button'); if (!b || b.disabled) return; page = +b.dataset.p; load(); scrollTo({ top: 0, behavior: 'smooth' }); };
@@ -707,14 +723,14 @@ PAGES.agenda = async (main) => {
     <div class="duo" style="align-items:start"><div><h2 class="sec-title" style="font-size:1.8rem;margin-bottom:18px">Akan Datang</h2><div class="agenda-list" id="up"></div></div>
     <div><h2 class="sec-title" style="font-size:1.8rem;margin-bottom:18px;color:var(--muted)">Telah Berlalu</h2><div class="agenda-list" id="past"></div></div></div>
   </div></section>`;
-  $('#fUnit').innerHTML = [['', 'Semua', '#0d1a2e'], ...units.map((u) => [u.slug, chipLabel(u), u.color])].map(([v, l, c]) => `<button class="chip-btn${v === unit ? ' on' : ''}" data-v="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)}</button>`).join('');
+  $('#fUnit').innerHTML = unitSelect(unit);
   const load = async () => {
     const f = unit ? '&unit=' + unit : '';
     const [up, past] = await Promise.all([api('agenda?upcoming=1&limit=50' + f), api('agenda?past=1&limit=30' + f)]);
     $('#up').innerHTML = up.items.length ? up.items.map((a) => agendaItem(a)).join('') : empty('Belum ada agenda mendatang.');
     $('#past').innerHTML = past.items.length ? past.items.map((a) => agendaItem(a, true)).join('') : empty('Belum ada agenda.');
   };
-  $('#fUnit').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; unit = b.dataset.v; $$('#fUnit button').forEach((x) => x.classList.toggle('on', x === b)); load(); };
+  $('#fUnit').onchange = (e) => { unit = e.target.value; load(); };
   load();
 };
 
@@ -735,14 +751,14 @@ PAGES.galeri = async (main) => {
     <div class="pager"><button class="btn btn-line" id="more" hidden>Muat lebih banyak</button></div>
   </div></section>`;
   if ($('#galYT')) renderYouTube($('#galYT'), { limit: 8, layout: 'grid' });
-  $('#fUnit').innerHTML = [['', 'Semua', '#0d1a2e'], ...units.map((u) => [u.slug, chipLabel(u), u.color])].map(([v, l, c]) => `<button class="chip-btn${v === unit ? ' on' : ''}" data-v="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)}</button>`).join('');
+  $('#fUnit').innerHTML = unitSelect(unit);
   const load = async (append) => {
     const d = await api(`gallery?limit=24&page=${page}${unit ? '&unit=' + unit : ''}`);
     const html = d.items.map((g) => `<figure data-lightbox="${esc(g.image)}" data-caption="${esc(g.caption || '')}"><img src="${esc(g.image)}" alt="${esc(g.caption || '')}" loading="lazy">${g.caption || g.unit_slug ? `<figcaption>${esc(g.caption || '')} <br>${esc(unitOf(g.unit_slug).name)}</figcaption>` : ''}</figure>`).join('');
     if (append) $('#gal').insertAdjacentHTML('beforeend', html); else $('#gal').innerHTML = html || empty('Belum ada foto.');
     $('#more').hidden = page >= d.pages;
   };
-  $('#fUnit').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; unit = b.dataset.v; page = 1; $$('#fUnit button').forEach((x) => x.classList.toggle('on', x === b)); load(); };
+  $('#fUnit').onchange = (e) => { unit = e.target.value; page = 1; load(); };
   $('#more').onclick = () => { page++; load(true); };
   load();
 };
@@ -792,6 +808,44 @@ function notFound(main) {
   <section class="section"><div class="wrap"><a class="btn btn-dark" href="/">Kembali ke beranda ${icon('arrow')}</a></div></section>`;
 }
 PAGES.notfound = notFound;
+
+// ---------- Program Sekolah (program kerja wakil kepala sekolah) ----------
+const PSTATUS = { berjalan: ['Berjalan', '#16966a'], rencana: ['Rencana', '#235ba4'], selesai: ['Selesai', '#64748b'] };
+function programCard(p, compact = false) {
+  const u = unitOf(p.unit_slug), [sl, sc] = PSTATUS[p.status] || PSTATUS.berjalan;
+  return `<article class="prog-item" style="--c:${u.color}">
+    ${p.image ? `<a class="pi-img" href="${esc(p.image)}" data-lightbox="${esc(p.image)}" data-caption="${esc(p.title)}"><img src="${esc(p.image)}" alt="" loading="lazy"></a>` : `<span class="pi-ico">${icon(u.icon || 'clipboard')}</span>`}
+    <div class="pi-body">
+      <div class="meta"><span class="badge soft" style="--c:${sc}">${sl}</span>${p.period ? `<span>${icon('calendar')}${esc(p.period)}</span>` : ''}${compact ? '' : unitBadge(p.unit_slug, true)}</div>
+      <h3>${esc(p.title)}</h3>${p.summary ? `<p>${esc(p.summary)}</p>` : ''}
+      ${p.description ? `<details><summary>Selengkapnya</summary><div class="desc">${esc(p.description)}</div></details>` : ''}
+    </div></article>`;
+}
+PAGES.program = async (main) => {
+  setTitle('Program Sekolah');
+  const waka = Object.values(UNITS).filter((u) => u.type === 'waka');
+  let unit = params.get('waka') ? 'waka-' + params.get('waka') : '';
+  main.innerHTML = `${pageHero('Program Sekolah', 'Program kerja SMK Negeri 8 Surabaya yang dikelola para wakil kepala sekolah.', ['Program Sekolah'])}
+  <section class="section alt" style="padding:48px 0"><div class="wrap">
+    <div class="sec-label mono"><b>●</b>Wakil Kepala Sekolah</div>
+    <div class="waka-grid" id="wakaGrid"></div>
+  </div></section>
+  <section class="section" style="padding-top:40px"><div class="wrap">
+    <div class="filters" id="fWaka"></div>
+    <div class="prog-list" id="progList"><div class="skel" style="height:140px"></div></div>
+  </div></section>`;
+  const d = await api('program');
+  const cnt = (s) => d.items.filter((x) => x.unit_slug === s).length;
+  $('#wakaGrid').innerHTML = waka.map((u) => `<a class="waka-card" href="${unitUrl(u)}" style="--c:${u.color}"><span class="wk-ico">${unitMark(u)}</span><span><b>${esc(u.name)}</b><small>${cnt(u.slug)} program · lihat halaman →</small></span></a>`).join('');
+  $('#fWaka').innerHTML = [['', 'Semua program', '#0d1a2e'], ...waka.map((u) => [u.slug, u.short, u.color]), ['sekolah', 'Sekolah', '#235ba4']].map(([v, l, c]) => `<button class="chip-btn${v === unit ? ' on' : ''}" data-v="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)}</button>`).join('');
+  const draw = () => {
+    const items = d.items.filter((x) => !unit || x.unit_slug === unit);
+    $('#progList').innerHTML = items.length ? items.map((p) => programCard(p)).join('') : empty('Belum ada program untuk pilihan ini.');
+    history.replaceState(null, '', '/program' + (unit && unit.startsWith('waka-') ? '?waka=' + unit.slice(5) : ''));
+  };
+  $('#fWaka').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; unit = b.dataset.v; $$('#fWaka button').forEach((x) => x.classList.toggle('on', x === b)); draw(); };
+  draw();
+};
 
 // ---------- Prestasi Siswa ----------
 let PRES_CACHE = [];

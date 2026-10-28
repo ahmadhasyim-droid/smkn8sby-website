@@ -4,3 +4,4 @@
 /berita/:slug    /artikel  200
 /login           /admin/   302
 /tefa/:slug      /unit     200
+/waka/:slug      /unit     200
