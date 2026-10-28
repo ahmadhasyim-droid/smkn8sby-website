@@ -191,3 +191,10 @@ td.act .btn + .btn { margin-left: 4px; }
   .editor-bar { top: 68px; }
 }
 #af .field { grid-column: auto; }
+
+/* Backup */
+.chk { display: flex; gap: 8px; align-items: flex-start; font-size: .9rem; margin: 8px 0; cursor: pointer; }
+.chk input { margin-top: 4px; }
+.prog { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.prog span { display: block; height: 100%; background: var(--blue, #235ba4); transition: width .2s; }
+.notice .ico { width: 16px; height: 16px; vertical-align: -3px; }

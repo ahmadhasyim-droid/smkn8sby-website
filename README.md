@@ -226,3 +226,15 @@ Halaman **/sarpras** menggantikan aplikasi lama `sarprassmkn8sby.web.app`. Selur
 **Siapa yang bisa mengelola:** akun **admin** dan akun **Waka Sarpras** (`waka.sarpras`, unit *Waka Sarana Prasarana*). Pengunjung lain hanya bisa melihat (sama seperti "Mode Publik" di aplikasi lama). Tombol **Login Admin** di SI-SARPRAS membuka halaman login lalu kembali otomatis ke /sarpras.
 
 Catatan: foto aset lama tetap ditautkan ke Google Drive aplikasi lama; foto & berkas baru disimpan di database website. Stiker QR baru mengarah ke `smkn8-sby.sch.id/sarpras?asset=KODE`; kode barang lama tetap sama sehingga dapat dicari lewat menu Scan QR → cari manual.
+
+## Backup & Pemulihan (menu admin)
+
+Menu **Backup & Pemulihan** (khusus admin, di grup *Sekolah*) melindungi data website dari terhapus/rusak.
+
+- **Unduh backup** — seluruh isi website (pengaturan, unit, akun, berita, agenda, galeri, program, prestasi, lowongan, skema, DUDI, pesan, SI-SARPRAS, serta gambar & berkas unggahan) diunduh menjadi satu file `.json`. Simpan di 2 tempat berbeda (mis. Google Drive sekolah & flashdisk). File berisi akun pengguna (password dalam bentuk hash) dan pesan masuk — **jangan dibagikan**.
+- **Pengingat berkala** — dasbor admin menampilkan peringatan merah bila backup terakhir sudah lewat batas (default 7 hari; bisa diubah 1/3/7/14/30 hari).
+- **Pulihkan** — pilih file backup, centang jenis data yang ingin dipulihkan, pilih **Ganti** (isi persis seperti file) atau **Gabungkan**, ketik `PULIHKAN`. Secara bawaan sistem otomatis mengunduh backup kondisi saat ini sebelum memulihkan. Akun admin yang sedang dipakai tidak ikut terhapus.
+- **Riwayat** — setiap unduh & pemulihan tercatat (waktu, oleh siapa, jumlah data).
+
+Lapisan pengaman tambahan: Cloudflare D1 memiliki fitur **Time Travel** yang dapat mengembalikan seluruh database ke titik waktu tertentu (beberapa hari terakhir, tergantung paket akun Cloudflare). Caranya lewat terminal:
+`npx wrangler d1 time-travel info smkn8sby-db` lalu `npx wrangler d1 time-travel restore smkn8sby-db --timestamp=<waktu>`.

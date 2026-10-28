@@ -28,6 +28,8 @@ const P = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+  shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  dl: '<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>',
   upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
 };
 const ic = (n) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
@@ -314,7 +316,7 @@ function menu() {
   const groups = [['Konten', items]];
   if (isAdmin()) {
     groups.push(['Unit', [['units', 'Profil Unit & Waka', 'unit'], ['dudi', 'DUDI / Mitra Industri', 'handshake'], ['lowongan', 'Lowongan (BKK)', 'job'], ['skema', 'Skema (LSP)', 'badge'], ['/sarpras', 'SI-SARPRAS (Inventaris)', 'box']]]);
-    groups.push(['Sekolah', [['settings', 'Pengaturan Situs', 'gear'], ['users', 'Pengguna & Akses', 'users'], ['messages', 'Pesan Masuk', 'mail']]]);
+    groups.push(['Sekolah', [['settings', 'Pengaturan Situs', 'gear'], ['users', 'Pengguna & Akses', 'users'], ['messages', 'Pesan Masuk', 'mail'], ['backup', 'Backup & Pemulihan', 'shield']]]);
   } else {
     const g = [[`units/${u}`, 'Profil Unit', 'unit']];
     if (isBkk()) g.push(['lowongan', 'Lowongan Kerja (BKK)', 'job']);
@@ -337,7 +339,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 16</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 17</span>
       </div>
     </aside>
     <div class="main">
@@ -367,11 +369,12 @@ V.dashboard = async (view) => {
   if (isAdmin() || isBkk()) quick.push(['lowongan/new', 'Tambah lowongan', 'job']);
   if (isAdmin() || ME.unit_slug === 'lsp') quick.push(['skema/new', 'Tambah skema', 'badge']);
   if (isAdmin() || isBkk() || UNIT[ME.unit_slug]?.type === 'jurusan') quick.push(['dudi/new', 'Tambah mitra DUDI', 'handshake']);
-  if (isAdmin()) quick.push(['users', 'Kelola pengguna', 'users'], ['settings', 'Pengaturan situs', 'gear']);
+  if (isAdmin()) quick.push(['users', 'Kelola pengguna', 'users'], ['settings', 'Pengaturan situs', 'gear'], ['backup', 'Backup data website', 'shield']);
   view.innerHTML = `
     <div class="welcome"><div><span class="mono" style="color:var(--sky)">${isAdmin() ? 'Administrator' : esc(TYPE_LABEL[un?.type] || 'Unit')}</span>
       <h2>Halo, ${esc(ME.name || ME.username)}</h2><p>${isAdmin() ? 'Anda dapat mengelola seluruh isi website, unit, dan pengguna.' : `Anda mengelola halaman ${esc(un?.name || '')}.`}</p></div>
       <div><a class="btn btn-primary" href="#/posts/new">${ic('plus')}Tulis berita</a>${!isAdmin() && un ? `<a class="btn btn-line" href="${unitUrl(un)}" target="_blank">${ic('ext')}Lihat halaman</a>` : ''}</div></div>
+    ${isAdmin() ? backupReminder(d) : ''}
     <div class="grid-stats">${stats.map(([v, l, c]) => `<div class="stat" style="--c:${c}"><b>${v}</b><span>${l}</span></div>`).join('')}</div>
     <div class="form-grid">
       <div class="box"><h3>Berita terbaru</h3>${d.recent.length ? `<table><tbody>${d.recent.map((r) => `<tr><td><a href="#/posts/${r.id}"><span class="t-title">${esc(r.title)}</span><span class="t-sub">${fmtDate(r.published_at)} · ${r.views}× dibaca</span></a></td><td>${unitTag(r.unit_slug)}</td><td><span class="tag ${r.status === 'publish' ? 'ok' : 'draft'}">${r.status === 'publish' ? 'Terbit' : 'Draf'}</span></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Belum ada berita.</div>'}</div>
@@ -651,6 +654,141 @@ V.account = async (view) => {
     e.preventDefault(); const d = readForm(view, [{ k: 'old' }, { k: 'new' }, { k: 'new2' }]);
     if (d.new !== d.new2) return toast('Ulangan password tidak sama.', true);
     try { await api('auth/password', { method: 'POST', body: d }); toast('Password berhasil diganti'); e.target.reset(); } catch (er) { toast(er.message, true); }
+  };
+};
+
+// ---------- Backup & Pemulihan ----------
+const TABLE_LABEL = {
+  settings: 'Pengaturan situs', units: 'Profil unit (jurusan, lembaga, TEFA, Waka)', users: 'Akun pengguna', posts: 'Berita & kegiatan', agenda: 'Agenda',
+  gallery: 'Galeri foto', programs: 'Program sekolah', prestasi: 'Prestasi siswa', lowongan: 'Lowongan kerja (BKK)', skema: 'Skema sertifikasi (LSP)',
+  dudi: 'DUDI / mitra industri', messages: 'Pesan masuk', sarpras_meta: 'SI-SARPRAS: lokasi, pengumuman, template', sarpras_assets: 'SI-SARPRAS: inventaris aset',
+  sarpras_bast: 'SI-SARPRAS: BAST/BAPB', media: 'Gambar & berkas unggahan',
+};
+const daysSince = (iso) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 864e5) : null);
+const fmtBytes = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
+const fmtDT = (iso) => (iso ? new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }) : '-');
+function backupReminder(d) {
+  const n = daysSince(d.backup_last), iv = d.backup_interval || 7;
+  if (n !== null && n < iv) return '';
+  return `<div class="notice bad" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <span>${ic('shield')} ${n === null ? '<b>Data website belum pernah dibackup.</b>' : `<b>Backup terakhir ${n} hari lalu.</b>`} Disarankan backup setiap ${iv} hari agar data aman.</span>
+    <a class="btn btn-primary btn-sm" href="#/backup">Backup sekarang</a></div>`;
+}
+function saveFile(text, name) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+async function buildBackup(info, { media = true, users = true } = {}, onProgress = () => {}) {
+  const list = info.tables.filter((t) => (media || t.name !== 'media') && (users || t.name !== 'users'));
+  const total = list.reduce((n, t) => n + t.count, 0) || 1;
+  const out = { app: 'smkn8sby-website', format: 1, schema_version: info.schema, created_at: new Date().toISOString(), created_by: ME.name || ME.username, include_media: media, include_users: users, tables: {} };
+  let done = 0;
+  for (const t of list) {
+    out.tables[t.name] = [];
+    let offset = 0;
+    while (offset !== null) {
+      const d = await api(`admin/backup/table/${t.name}?offset=${offset}`);
+      out.tables[t.name].push(...d.rows); done += d.rows.length; offset = d.next;
+      onProgress(Math.min(99, Math.round(done / total * 100)), TABLE_LABEL[t.name] || t.name);
+    }
+  }
+  const text = JSON.stringify(out);
+  const stamp = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+  return { text, name: `backup-smkn8sby-${stamp}${media ? '' : '-tanpa-gambar'}.json`, rows: done, tables: list.length };
+}
+V.backup = async (view) => {
+  setHead('Backup & Pemulihan');
+  const info = await api('admin/backup');
+  const n = daysSince(info.last), late = n === null || n >= info.interval;
+  const totalRows = info.tables.reduce((a, t) => a + t.count, 0);
+  view.innerHTML = `
+  <div class="notice ${late ? 'bad' : 'info'}" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <span>${ic('shield')} ${info.last ? `Backup terakhir: <b>${fmtDT(info.last)}</b> (${n === 0 ? 'hari ini' : n + ' hari lalu'}).` : '<b>Belum pernah ada backup.</b>'} ${late ? 'Sudah waktunya backup lagi.' : 'Data dalam kondisi aman.'}</span>
+    <label style="display:flex;gap:8px;align-items:center;font-size:.85rem">Ingatkan setiap
+      <select id="iv">${[1, 3, 7, 14, 30].map((d) => `<option value="${d}" ${d === info.interval ? 'selected' : ''}>${d} hari</option>`).join('')}</select></label>
+  </div>
+  <div class="form-grid">
+    <div>
+      <div class="box"><h3>1 · Unduh backup</h3>
+        <p style="margin:0 0 14px">Seluruh isi website diunduh menjadi satu file <b>.json</b>. Simpan file ini di tempat aman (Google Drive sekolah, flashdisk, atau laptop admin).</p>
+        <div class="table-wrap" style="margin-bottom:14px"><table><thead><tr><th>Data</th><th style="text-align:right">Jumlah</th></tr></thead><tbody>
+          ${info.tables.map((t) => `<tr><td>${esc(TABLE_LABEL[t.name] || t.name)}</td><td style="text-align:right">${t.count.toLocaleString('id-ID')}${t.name === 'media' && info.mediaBytes ? ` <span class="t-sub" style="display:inline">(${fmtBytes(info.mediaBytes)})</span>` : ''}</td></tr>`).join('')}
+          <tr><td><b>Total</b></td><td style="text-align:right"><b>${totalRows.toLocaleString('id-ID')} baris</b></td></tr></tbody></table></div>
+        <label class="chk"><input type="checkbox" id="opMedia" checked> Sertakan gambar & berkas unggahan (${fmtBytes(info.mediaBytes || 0)})</label>
+        <label class="chk"><input type="checkbox" id="opUsers" checked> Sertakan akun pengguna</label>
+        <div class="notice info" style="margin:12px 0">File backup berisi akun pengguna (password tersimpan dalam bentuk acak/hash) dan pesan masuk. <b>Jangan dibagikan</b> ke orang lain.</div>
+        <div id="dlProg"></div>
+        <button class="btn btn-primary" id="bDl">${ic('dl')} Unduh backup sekarang</button>
+      </div>
+      <div class="box"><h3>2 · Pulihkan dari file backup</h3>
+        <p style="margin:0 0 14px">Gunakan bila data terhapus atau rusak. Pilih file backup <b>.json</b> yang pernah diunduh dari menu ini.</p>
+        <input type="file" id="rf" accept=".json,application/json">
+        <div id="rInfo" style="margin-top:14px"></div>
+      </div>
+    </div>
+    <div>
+      <div class="box"><h3>Riwayat</h3>${info.log.length ? `<table><tbody>${info.log.map((l) => `<tr><td><span class="tag ${l.kind === 'pulihkan' ? 'bad' : 'ok'}">${l.kind === 'pulihkan' ? 'Pulihkan' : 'Unduh'}</span></td><td><span class="t-title" style="font-size:.85rem">${fmtDT(l.created_at)}</span><span class="t-sub">${esc(l.user_name || '')} · ${l.rows.toLocaleString('id-ID')} baris${l.size ? ' · ' + fmtBytes(l.size) : ''}${l.note ? ' · ' + esc(l.note) : ''}</span></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Belum ada riwayat.</div>'}</div>
+      <div class="box"><h3>Tips keamanan data</h3>
+        <ol style="margin:0;padding-left:18px;font-size:.88rem;line-height:1.6">
+          <li>Unduh backup secara rutin. Panel akan mengingatkan bila sudah lewat ${info.interval} hari.</li>
+          <li>Simpan minimal 2 salinan terakhir di tempat berbeda (mis. Google Drive & flashdisk).</li>
+          <li>Selalu unduh backup sebelum perubahan besar (impor Excel, hapus banyak data).</li>
+          <li>Cloudflare D1 juga memiliki fitur <b>Time Travel</b> untuk mengembalikan database ke titik waktu tertentu (lihat README).</li>
+        </ol></div>
+    </div>
+  </div>`;
+  $('#iv').onchange = async (e) => { try { await api('admin/backup/interval', { method: 'PUT', body: { days: +e.target.value } }); toast('Pengingat backup diperbarui'); } catch (er) { toast(er.message, true); } };
+  const prog = (box, pct, label) => { box.innerHTML = `<div class="prog"><span style="width:${pct}%"></span></div><div class="t-sub" style="margin:6px 0 12px">${pct}% · ${esc(label)}</div>`; };
+  $('#bDl').onclick = async () => {
+    const b = $('#bDl'); b.disabled = true;
+    try {
+      const r = await buildBackup(info, { media: $('#opMedia').checked, users: $('#opUsers').checked }, (p, l) => prog($('#dlProg'), p, 'Mengambil ' + l));
+      saveFile(r.text, r.name);
+      await api('admin/backup/log', { method: 'POST', body: { kind: 'unduh', size: r.text.length, tables: r.tables, rows: r.rows, note: $('#opMedia').checked ? '' : 'tanpa gambar' } });
+      toast('Backup berhasil diunduh: ' + r.name);
+      setTimeout(() => route(), 800);
+    } catch (er) { toast(er.message, true); $('#dlProg').innerHTML = ''; b.disabled = false; }
+  };
+  $('#rf').onchange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    let data;
+    try { data = JSON.parse(await file.text()); } catch { $('#rInfo').innerHTML = '<div class="notice bad">File tidak dapat dibaca. Pastikan memilih file backup .json yang benar.</div>'; return; }
+    if (data.app !== 'smkn8sby-website' || !data.tables || typeof data.tables !== 'object') { $('#rInfo').innerHTML = '<div class="notice bad">Ini bukan file backup website SMKN 8 Surabaya.</div>'; return; }
+    const names = Object.keys(data.tables).filter((k) => Array.isArray(data.tables[k]));
+    const rows = names.reduce((a, k) => a + data.tables[k].length, 0);
+    $('#rInfo').innerHTML = `<div class="notice info"><b>File backup tanggal ${fmtDT(data.created_at)}</b> oleh ${esc(data.created_by || '-')} · ${rows.toLocaleString('id-ID')} baris dari ${names.length} jenis data${data.include_media ? '' : ' · tanpa gambar'}${data.include_users ? '' : ' · tanpa akun pengguna'}.</div>
+      <div class="table-wrap" style="max-height:240px;overflow:auto;margin-bottom:12px"><table><tbody>${names.map((k) => `<tr><td><label class="chk" style="margin:0"><input type="checkbox" class="rt" value="${esc(k)}" checked> ${esc(TABLE_LABEL[k] || k)}</label></td><td style="text-align:right">${data.tables[k].length.toLocaleString('id-ID')}</td></tr>`).join('')}</tbody></table></div>
+      <label class="chk"><input type="radio" name="rm" value="replace" checked> <span><b>Ganti</b> — isi data terpilih dihapus lalu diganti persis seperti di file backup</span></label>
+      <label class="chk"><input type="radio" name="rm" value="merge"> <span><b>Gabungkan</b> — data di file ditambahkan/menimpa yang sama, data baru yang tidak ada di file tetap disimpan</span></label>
+      <label class="chk"><input type="checkbox" id="preDl" checked> Unduh backup kondisi saat ini terlebih dahulu (sangat disarankan)</label>
+      <label class="field" style="margin-top:10px"><span>Ketik <b>PULIHKAN</b> untuk konfirmasi</span><input id="rConf" autocomplete="off"></label>
+      <div id="rProg" style="margin-top:12px"></div>
+      <button class="btn btn-danger" id="bRs" style="margin-top:4px">${ic('upload')} Pulihkan data</button>`;
+    $('#bRs').onclick = async () => {
+      if ($('#rConf').value.trim().toUpperCase() !== 'PULIHKAN') { toast('Ketik PULIHKAN untuk melanjutkan.', true); return; }
+      const sel = $$('.rt:checked').map((x) => x.value); if (!sel.length) { toast('Pilih minimal satu jenis data.', true); return; }
+      const replace = $('input[name=rm]:checked').value === 'replace';
+      const b = $('#bRs'); b.disabled = true;
+      try {
+        if ($('#preDl').checked) {
+          const pre = await buildBackup(info, { media: true, users: true }, (p, l) => prog($('#rProg'), p, 'Mengamankan data saat ini: ' + l));
+          saveFile(pre.text, pre.name.replace('backup-', 'sebelum-pulihkan-'));
+          await api('admin/backup/log', { method: 'POST', body: { kind: 'unduh', size: pre.text.length, tables: pre.tables, rows: pre.rows, note: 'otomatis sebelum pemulihan' } });
+        }
+        const total = sel.reduce((a, k) => a + data.tables[k].length, 0) || 1; let done = 0;
+        for (const k of sel) {
+          const rowsK = data.tables[k], size = k === 'media' ? 3 : 200;
+          if (!rowsK.length && replace) await api('admin/backup/restore', { method: 'POST', body: { table: k, rows: [], reset: true } });
+          for (let i = 0; i < rowsK.length; i += size) {
+            await api('admin/backup/restore', { method: 'POST', body: { table: k, rows: rowsK.slice(i, i + size), reset: replace && i === 0 } });
+            done += Math.min(size, rowsK.length - i); prog($('#rProg'), Math.round(done / total * 100), 'Memulihkan ' + (TABLE_LABEL[k] || k));
+          }
+        }
+        await api('admin/backup/log', { method: 'POST', body: { kind: 'pulihkan', rows: done, tables: sel.length, note: `${replace ? 'ganti' : 'gabung'} · file ${fmtDT(data.created_at)}` } });
+        toast('Pemulihan selesai. Memuat ulang…'); setTimeout(() => location.reload(), 1200);
+      } catch (er) { toast(er.message, true); b.disabled = false; }
+    };
   };
 };
 

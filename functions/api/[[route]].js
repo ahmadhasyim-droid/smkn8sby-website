@@ -13,7 +13,7 @@ const JURUSAN = new Set(DEFAULT_UNITS.filter((u) => u.type === 'jurusan').map((u
 const SESSION_DAYS = 7;
 const MAX_MEDIA_BYTES = 1_900_000;
 const ROLES = ['admin', 'unit'];
-const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded', 'prestasi_seeded', 'sarpras_seeded'];
+const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded', 'prestasi_seeded', 'sarpras_seeded', 'backup_interval'];
 const FEED_TTL = 60 * 60 * 1000; // feed YouTube/Instagram diperbarui tiap 1 jam
 
 // ---------------- feed YouTube & Instagram ----------------
@@ -211,6 +211,80 @@ async function seedLowongan(db) {
   const t = now();
   await db.batch(LOWONGAN_SEED.map((j) => db.prepare(`INSERT OR IGNORE INTO lowongan(skey,company,position,location,job_type,majors,description,apply_link,poster,status,created_at)
     VALUES(?,?,?,?,?,?,?,?,?,'buka',?)`).bind(j.skey, j.company, j.position, j.location, j.job_type, j.majors, j.description, j.apply_link, j.poster, t)));
+}
+
+// ---------------- BACKUP & PEMULIHAN ----------------
+// Tabel yang dicadangkan (sesi login, percobaan login, dan cache feed tidak perlu)
+const BACKUP_SKIP = new Set(['sessions', 'login_attempts', 'cache', 'backup_log']);
+const BACKUP_ORDER = ['settings', 'units', 'users', 'posts', 'agenda', 'gallery', 'programs', 'prestasi', 'lowongan', 'skema', 'dudi', 'messages', 'sarpras_meta', 'sarpras_assets', 'sarpras_bast', 'media'];
+async function backupTables(db) {
+  const rows = (await db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'`).all()).results.map((r) => r.name);
+  const ok = rows.filter((n) => !BACKUP_SKIP.has(n) && /^[a-z_]+$/.test(n));
+  return [...BACKUP_ORDER.filter((n) => ok.includes(n)), ...ok.filter((n) => !BACKUP_ORDER.includes(n)).sort()];
+}
+async function tableCols(db, t) { return (await db.prepare(`PRAGMA table_info(${t})`).all()).results.map((c) => c.name); }
+function toB64(buf) {
+  const u = buf instanceof Uint8Array ? buf : new Uint8Array(buf instanceof ArrayBuffer ? buf : buf || []);
+  let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function fromB64(b) { const s = atob(String(b || '')); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u.buffer; }
+async function handleBackup(db, parts, method, q, user, body) {
+  const action = parts[2];
+  const tables = await backupTables(db);
+  if (!action && method === 'GET') {
+    const counts = await db.batch(tables.map((t) => db.prepare(`SELECT COUNT(*) n FROM ${t}`)));
+    const mediaBytes = tables.includes('media') ? (await db.prepare(`SELECT COALESCE(SUM(size),0) n FROM media`).first('n')) : 0;
+    const log = (await db.prepare(`SELECT * FROM backup_log ORDER BY id DESC LIMIT 30`).all()).results;
+    const last = (await db.prepare(`SELECT created_at FROM backup_log WHERE kind='unduh' ORDER BY id DESC LIMIT 1`).first('created_at')) || null;
+    const interval = clampInt(await db.prepare(`SELECT value FROM settings WHERE key='backup_interval'`).first('value'), 7, 1, 90);
+    return json({ tables: tables.map((t, i) => ({ name: t, count: counts[i].results[0].n })), mediaBytes, log, last, interval, schema: SCHEMA_VERSION });
+  }
+  if (action === 'table' && method === 'GET') {
+    const t = parts[3];
+    if (!tables.includes(t)) return err('Tabel tidak dikenal.');
+    const offset = clampInt(q.get('offset'), 0, 0, 1e9);
+    const limit = t === 'media' ? clampInt(q.get('limit'), 4, 1, 8) : clampInt(q.get('limit'), 500, 1, 1000);
+    const rows = (await db.prepare(`SELECT * FROM ${t} ORDER BY rowid LIMIT ? OFFSET ?`).bind(limit, offset).all()).results;
+    if (t === 'media') rows.forEach((r) => { r.data = toB64(r.data); });
+    return json({ rows, next: rows.length === limit ? offset + limit : null }, 200, { 'Cache-Control': 'no-store' });
+  }
+  if (action === 'log' && method === 'POST') {
+    const b = await body();
+    await db.prepare(`INSERT INTO backup_log(kind,note,size,tables,rows,user_name,created_at) VALUES(?,?,?,?,?,?,?)`)
+      .bind(b.kind === 'pulihkan' ? 'pulihkan' : 'unduh', str(b.note, 300), clampInt(b.size, 0, 0, 1e12), clampInt(b.tables, 0, 0, 1000), clampInt(b.rows, 0, 0, 1e9), user.name || user.username, now()).run();
+    return json({ ok: true });
+  }
+  if (action === 'interval' && method === 'PUT') {
+    const b = await body();
+    await db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('backup_interval',?)`).bind(String(clampInt(b.days, 7, 1, 90))).run();
+    return json({ ok: true });
+  }
+  if (action === 'restore' && method === 'POST') {
+    const b = await body();
+    const t = String(b.table || '');
+    if (!tables.includes(t)) return json({ ok: true, skipped: true }); // tabel tidak ada di versi ini
+    const cols = await tableCols(db, t);
+    const rows = Array.isArray(b.rows) ? b.rows.slice(0, 1000) : [];
+    const stmts = [];
+    if (b.reset) {
+      if (t === 'users') stmts.push(db.prepare(`DELETE FROM users WHERE id<>?`).bind(user.id)); // akun yang sedang dipakai tetap ada
+      else if (t === 'settings') stmts.push(db.prepare(`DELETE FROM settings WHERE key NOT IN ('schema_version')`));
+      else stmts.push(db.prepare(`DELETE FROM ${t}`));
+    }
+    for (const r of rows) {
+      if (!r || typeof r !== 'object') continue;
+      if (t === 'settings' && r.key === 'schema_version') continue;
+      if (t === 'users' && r.id === user.id) continue; // jangan timpa akun yang sedang login
+      const c = cols.filter((k) => k in r);
+      if (!c.length) continue;
+      const vals = c.map((k) => (t === 'media' && k === 'data' ? fromB64(r[k]) : r[k] === undefined ? null : typeof r[k] === 'object' && r[k] !== null ? JSON.stringify(r[k]) : r[k]));
+      stmts.push(db.prepare(`INSERT OR REPLACE INTO ${t}(${c.join(',')}) VALUES(${c.map(() => '?').join(',')})`).bind(...vals));
+    }
+    for (let i = 0; i < stmts.length; i += 100) await db.batch(stmts.slice(i, i + 100));
+    return json({ ok: true, count: rows.length });
+  }
+  return err('Endpoint tidak ditemukan', 404);
 }
 
 // ---------------- SI-SARPRAS ----------------
@@ -742,6 +816,8 @@ export async function onRequest(ctx) {
       if (isAdmin) {
         extra.users = (await db.prepare(`SELECT COUNT(*) n FROM users`).first()).n;
         extra.unread = (await db.prepare(`SELECT COUNT(*) n FROM messages WHERE is_read=0`).first()).n;
+        extra.backup_last = (await db.prepare(`SELECT created_at FROM backup_log WHERE kind='unduh' ORDER BY id DESC LIMIT 1`).first('created_at')) || null;
+        extra.backup_interval = clampInt(await db.prepare(`SELECT value FROM settings WHERE key='backup_interval'`).first('value'), 7, 1, 90);
       }
       if (isAdmin || isBkk(user)) extra.lowongan = (await db.prepare(`SELECT COUNT(*) n FROM lowongan WHERE status='buka'`).first()).n;
       if (isAdmin || user.unit_slug === 'lsp') extra.skema = (await db.prepare(`SELECT COUNT(*) n FROM skema`).first()).n;
@@ -768,6 +844,12 @@ export async function onRequest(ctx) {
         await db.prepare(`UPDATE units SET ${sets.join(',')}, updated_at=? WHERE slug=?`).bind(...args, now(), slug).run();
         return json({ ok: true });
       }
+    }
+
+    // Backup & pemulihan (khusus admin)
+    if (area === 'backup') {
+      if (!isAdmin) return err('Khusus admin.', 403);
+      return handleBackup(db, parts, method, q, user, body);
     }
 
     // Pengaturan situs (khusus admin)
