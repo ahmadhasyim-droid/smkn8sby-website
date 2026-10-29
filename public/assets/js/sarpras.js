@@ -197,7 +197,7 @@ function viewInventory(m) {
   const locs = allLocations();
   m.innerHTML = `
   <div class="page-h"><div><h1>Daftar Inventaris Sarpras</h1><p>Kelola dan pantau seluruh aset milik SMK Negeri 8 Surabaya.</p></div>
-    ${S.canEdit ? `<div class="actions"><button class="btn" id="bImport">${ic('xls')} Impor Excel</button><button class="btn" id="bLoc">${ic('pin')} Kelola Lokasi</button><button class="btn primary" id="bAdd">${ic('plus')} Tambah Aset</button></div>` : ''}</div>
+    ${S.canEdit ? `<div class="actions"><button class="btn" id="bSync">${ic('cloud')} Sinkron dari aplikasi lama</button><button class="btn" id="bImport">${ic('xls')} Impor Excel</button><button class="btn" id="bLoc">${ic('pin')} Kelola Lokasi</button><button class="btn primary" id="bAdd">${ic('plus')} Tambah Aset</button></div>` : ''}</div>
   <div class="card">
     <div class="tool">
       <label class="search">${ic('search')}<input type="search" id="q" placeholder="Cari nama barang, kode barang, atau kode TU…" value="${esc(inv.q)}"></label>
@@ -222,7 +222,7 @@ function viewInventory(m) {
       <td>${condBadge(a.condition)}</td>
       <td class="nowrap muted">${esc(a.procurement_date || '-')}</td>
       <td class="nowrap muted">${esc(a.handover_date || '-')}</td>
-      <td>${a.photo || a.photo_link ? `<button class="link" data-detail="${esc(a.id)}">${ic('img')} Lihat Foto</button>` : '<span class="muted">-</span>'}</td>
+      <td>${thumbUrl(a) ? `<button class="thumb" data-detail="${esc(a.id)}" title="Lihat foto"><img src="${esc(thumbUrl(a))}" alt="Foto ${esc(a.name)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.innerHTML='Lihat'"></button>` : a.photo_link ? `<button class="link" data-detail="${esc(a.id)}">${ic('img')} Lihat</button>` : '<span class="muted">-</span>'}</td>
       ${S.canEdit ? `<td class="r"><button class="icon-btn" data-detail="${esc(a.id)}" title="Rincian">${ic('search')}</button><button class="icon-btn" data-edit="${esc(a.id)}" title="Edit aset">${ic('edit')}</button><button class="icon-btn del" data-del="${esc(a.id)}" title="Hapus aset">${ic('trash')}</button></td>` : ''}
     </tr>`).join('') : `<tr><td colspan="11"><div class="empty">Tidak ada aset ditemukan.</div></td></tr>`;
   };
@@ -240,6 +240,7 @@ function viewInventory(m) {
   $('#bAdd')?.addEventListener('click', () => assetForm());
   $('#bLoc')?.addEventListener('click', manageLocations);
   $('#bImport')?.addEventListener('click', importExcel);
+  $('#bSync')?.addEventListener('click', syncOld);
 }
 
 function showDetail(a) {
@@ -363,6 +364,40 @@ function manageLocations() {
     try { await save(S.locations.filter((_, i) => i !== +b.dataset.i)); } catch (er) { toast(er.message, 'error'); }
   };
   $('#modal').addEventListener('click', function once(e) { if (e.target.id === 'modal' || e.target.closest('[data-close]')) { $('#modal').removeEventListener('click', once); render(); } });
+}
+
+// Foto: Google Drive (lh3) bisa diperkecil lewat akhiran =wNNN
+const thumbUrl = (a) => { const u = safeUrl(a.photo); if (!u) return ''; return /^https:\/\/lh3\.googleusercontent\.com\/d\/[\w-]+$/.test(u) ? u + '=w160' : u; };
+function syncOld() {
+  openModal(`<h3>Sinkron dari aplikasi lama</h3><p class="lead">Menarik data terbaru dari <b>sarprassmkn8sby.web.app</b>: aset baru, perubahan data, foto barang, BAST/BAPB, dan daftar lokasi.</p>
+    <ul class="muted" style="font-size:.86rem;padding-left:18px;margin:0 0 14px">
+      <li>Aset yang <b>sudah diubah di website ini</b> tidak ditimpa (hanya fotonya diisi bila masih kosong).</li>
+      <li>Foto dari Google Drive disalin ke website sehingga tetap tampil walau file di Drive dihapus.</li>
+      <li>Aset yang dihapus di aplikasi lama tidak ikut dihapus di sini.</li></ul>
+    <div id="syProg"></div>
+    <div class="foot"><button class="btn" data-close>Tutup</button><button class="btn primary" id="syGo">${ic('cloud')} Mulai sinkron</button></div>`);
+  $('#syGo').onclick = async () => {
+    const b = $('#syGo'); b.disabled = true;
+    const box = $('#syProg');
+    const line = (h) => { box.innerHTML += `<div style="font-size:.88rem;margin:4px 0">${h}</div>`; };
+    try {
+      line('⏳ Mengambil data dari aplikasi lama…');
+      const d = await api('sarpras/sync', { method: 'POST', body: {} });
+      line(`✅ ${d.total} aset di aplikasi lama · <b>${d.added}</b> baru · <b>${d.updated}</b> diperbarui · ${d.photoFilled} foto diisi · ${d.same} sama${d.keptLocal ? ` · ${d.keptLocal} dipertahankan (sudah diubah di sini)` : ''}${d.bastAdded ? ` · ${d.bastAdded} BAST baru` : ''}`);
+      if (d.goneInOld) line(`ℹ️ ${d.goneInOld} aset sudah tidak ada di aplikasi lama (tetap disimpan di sini; hapus manual bila perlu).`);
+      let left = d.photosLeft, total = left, after = '';
+      if (left) line(`<span id="syPh">⏳ Menyalin foto: 0 / ${total}</span>`);
+      while (left > 0) {
+        const r = await api('sarpras/sync/photos', { method: 'POST', body: { after } });
+        left = r.left; if (!r.last) break; after = r.last;
+        $('#syPh').textContent = `⏳ Menyalin foto: ${total - left} / ${total}`;
+      }
+      if (total) $('#syPh').textContent = left ? `⚠️ ${total - left} foto disalin, ${left} foto gagal (tetap ditampilkan langsung dari Google Drive).` : `✅ ${total} foto berhasil disalin ke website.`;
+      line('<b>Selesai.</b>');
+      await load(); render();
+      b.textContent = 'Sinkron lagi'; b.disabled = false;
+    } catch (er) { line('❌ ' + esc(er.message)); b.disabled = false; }
+  };
 }
 
 function importExcel() {

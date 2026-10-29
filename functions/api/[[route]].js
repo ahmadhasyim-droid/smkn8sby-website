@@ -188,6 +188,7 @@ async function ensureSchema(db) {
   await seedPrestasi(db);
   await seedLowongan(db);
   await seedSarpras(db);
+  try { await db.prepare(`UPDATE sarpras_assets SET src_updated=updated_at WHERE src_updated IS NULL AND created_by IS NULL`).run(); } catch (_) { /* abaikan */ }
   await db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('schema_version',?)`).bind(SCHEMA_VERSION).run();
   schemaReady = true;
 }
@@ -328,10 +329,106 @@ function sarprasBast(b) {
 }
 const SARPRAS_META_LIMITS = { locations: 20000, announcement: 6000, template: 6000 };
 async function deleteMediaUrl(db, u) { if (String(u || '').startsWith('/api/media/')) await db.prepare(`DELETE FROM media WHERE id=?`).bind(u.split('/').pop()).run(); }
+
+// Sinkronisasi dari aplikasi Sarpras lama (Firestore publik sarprassmkn8sby)
+const OLD_FS = 'https://firestore.googleapis.com/v1/projects/sarprassmkn8sby/databases/(default)/documents';
+const OLD_KEY = 'AIzaSyCUL0XLYq-9O5603h5EjXf0IIgP8LtG5qo'; // kunci web publik aplikasi lama (bukan rahasia)
+const fsVal = (v) => (!v ? '' : 'stringValue' in v ? v.stringValue : 'integerValue' in v ? Number(v.integerValue) : 'doubleValue' in v ? v.doubleValue
+  : 'booleanValue' in v ? v.booleanValue : 'arrayValue' in v ? (v.arrayValue.values || []).map(fsVal)
+  : 'mapValue' in v ? Object.fromEntries(Object.entries(v.mapValue.fields || {}).map(([k, x]) => [k, fsVal(x)])) : '');
+async function fsList(col, mask) {
+  const out = []; let token = '';
+  do {
+    const u = `${OLD_FS}/${col}?pageSize=300&key=${OLD_KEY}${mask ? mask.map((m) => '&mask.fieldPaths=' + m).join('') : ''}${token ? '&pageToken=' + encodeURIComponent(token) : ''}`;
+    const r = await fetch(u);
+    if (!r.ok) throw new Error('Aplikasi lama tidak dapat diakses (' + r.status + ').');
+    const j = await r.json();
+    (j.documents || []).forEach((d) => out.push({ id: d.name.split('/').pop(), ...Object.fromEntries(Object.entries(d.fields || {}).map(([k, v]) => [k, fsVal(v)])) }));
+    token = j.nextPageToken || '';
+  } while (token && out.length < 10000);
+  return out;
+}
+const isLh3 = (u) => /^https:\/\/lh3\.googleusercontent\.com\/d\/[\w-]+$/.test(String(u || ''));
+async function sarprasSync(db, step, user, opts = {}) {
+  if (step === 'photos') { // salin foto Google Drive ke database website, 6 foto per panggilan
+    const rows = (await db.prepare(`SELECT id,photo FROM sarpras_assets WHERE photo LIKE 'https://lh3.googleusercontent.com/d/%' AND id>? ORDER BY id LIMIT 6`).bind(str(opts.after, 100)).all()).results;
+    let copied = 0; const failed = [];
+    for (const r of rows) {
+      try {
+        const res = await fetch(r.photo + '=w1400', { cf: { cacheTtl: 3600 } });
+        const mime = (res.headers.get('Content-Type') || '').split(';')[0];
+        if (!res.ok || !/^image\/(jpeg|png|webp|gif)$/.test(mime)) throw new Error('status ' + res.status);
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength > MAX_MEDIA_BYTES) throw new Error('terlalu besar');
+        const id = randHex(12);
+        await db.batch([
+          db.prepare(`INSERT INTO media(id,mime,data,size,unit_slug,created_by,created_at) VALUES(?,?,?,?,?,?,?)`).bind(id, mime, buf, buf.byteLength, 'waka-sarpras', user.id, now()),
+          db.prepare(`UPDATE sarpras_assets SET photo=?, src_photo=? WHERE id=?`).bind(`/api/media/${id}`, r.photo.split('/').pop(), r.id),
+        ]);
+        copied++;
+      } catch (e) { failed.push(r.id); }
+    }
+    const left = await db.prepare(`SELECT COUNT(*) n FROM sarpras_assets WHERE photo LIKE 'https://lh3.googleusercontent.com/d/%'`).first('n');
+    return { copied, failed: failed.length, left, last: rows.length ? rows[rows.length - 1].id : null };
+  }
+  // langkah data: tarik aset, BAST, dan lokasi terbaru
+  const [old, oldBast, cms] = await Promise.all([fsList('assets'), fsList('serahTerima'), fsList('settings', ['locations'])]);
+  const local = Object.fromEntries((await db.prepare(`SELECT id,updated_at,src_updated,photo,src_photo FROM sarpras_assets`).all()).results.map((r) => [r.id, r]));
+  const stmts = []; const stat = { added: 0, updated: 0, photoFilled: 0, keptLocal: 0, same: 0, bastAdded: 0 };
+  for (const o of old) {
+    if (!o.name) continue;
+    const ou = String(o.updatedAt || '');
+    const photo = isLh3(o.doc) ? o.doc : (o.docDriveId ? `https://lh3.googleusercontent.com/d/${o.docDriveId}` : '');
+    const f = {
+      code: str(o.code, 80), kode_tu: str(o.kodeTu, 300), name: str(o.name, 300), specs: str(o.specs, 2000), location: str(o.location, 300),
+      condition: SARPRAS_COND.includes(o.condition) ? o.condition : 'Baik', quantity: clampInt(o.quantity, 1, 1, 1e6),
+      procurement_date: str(o.procurementDate, 40), handover_date: str(o.handoverDate, 40), photo_link: str(o.docDriveWebViewLink, 500),
+    };
+    const l = local[o.id];
+    const photoId = photo ? photo.split('/').pop() : '';
+    if (!l) {
+      stmts.push(db.prepare(`INSERT INTO sarpras_assets(id,${Object.keys(f).join(',')},photo,updated_at,src_updated,src_photo) VALUES(?,${Object.keys(f).map(() => '?').join(',')},?,?,?,'')`)
+        .bind(o.id, ...Object.values(f), photo, ou || now(), ou));
+      stat.added++;
+    } else if (l.updated_at === l.src_updated) { // belum diubah di website baru → ikuti aplikasi lama
+      if (ou === l.src_updated && (!photoId || photoId === l.src_photo || l.photo === photo)) { stat.same++; continue; }
+      const keepPhoto = photoId && photoId === l.src_photo; // foto sama dan sudah disalin
+      stmts.push(db.prepare(`UPDATE sarpras_assets SET ${Object.keys(f).map((k) => k + '=?').join(',')}, photo=?, updated_at=?, src_updated=? WHERE id=?`)
+        .bind(...Object.values(f), keepPhoto ? l.photo : photo, ou, ou, o.id));
+      stat.updated++;
+    } else { // sudah diubah di website baru → data lokal dipertahankan, hanya foto kosong yang diisi
+      if (!l.photo && photo) { stmts.push(db.prepare(`UPDATE sarpras_assets SET photo=?, photo_link=? WHERE id=?`).bind(photo, f.photo_link, o.id)); stat.photoFilled++; }
+      else stat.keptLocal++;
+    }
+  }
+  const localBast = new Set((await db.prepare(`SELECT id FROM sarpras_bast`).all()).results.map((r) => r.id));
+  for (const b of oldBast) {
+    if (localBast.has(b.id) || !b.noSurat) continue;
+    stmts.push(db.prepare(`INSERT INTO sarpras_bast(id,type,no_surat,pihak1,pihak2,asset_name,qty,date,file,file_link,updated_at) VALUES(?,?,?,?,?,?,?,?,'',?,?)`)
+      .bind(b.id, b.type === 'BAPB' ? 'BAPB' : 'BAST', str(b.noSurat, 150), str(b.pihak1, 300), str(b.pihak2, 300), str(b.assetName, 300), clampInt(b.qty, 1, 1, 1e6), str(b.date, 40), str(b.driveWebViewLink, 500), str(b.updatedAt, 40) || now()));
+    stat.bastAdded++;
+  }
+  const oldLocs = (cms.find((c) => c.id === 'cms') || {}).locations;
+  if (Array.isArray(oldLocs)) {
+    const meta = await sarprasMeta(db);
+    const merged = [...meta.locations]; oldLocs.forEach((x) => { const v = str(x, 300); if (v && !merged.includes(v)) merged.push(v); });
+    stmts.push(db.prepare(`INSERT OR REPLACE INTO sarpras_meta(key,value) VALUES('locations',?)`).bind(JSON.stringify(merged)));
+  }
+  for (let i = 0; i < stmts.length; i += 90) await db.batch(stmts.slice(i, i + 90));
+  const oldIds = new Set(old.map((o) => o.id));
+  stat.goneInOld = (await db.prepare(`SELECT id FROM sarpras_assets WHERE created_by IS NULL`).all()).results.filter((r) => !oldIds.has(r.id)).length;
+  stat.total = old.length;
+  stat.photosLeft = await db.prepare(`SELECT COUNT(*) n FROM sarpras_assets WHERE photo LIKE 'https://lh3.googleusercontent.com/d/%'`).first('n');
+  return stat;
+}
 async function handleSarpras(db, req, parts, method, user, body) {
   const [, kind, id] = parts;
   if (!canSarpras(user)) return err('Menu SI-SARPRAS khusus Waka Sarpras dan admin.', 403);
   const t = now();
+  if (kind === 'sync' && method === 'POST') {
+    try { return json({ ok: true, ...(await sarprasSync(db, id === 'photos' ? 'photos' : 'data', user, await body())) }); }
+    catch (e) { return err(e.message || 'Sinkronisasi gagal.', 502); }
+  }
   if (kind === 'assets' && id === 'import' && method === 'POST') {
     const b = await body();
     const items = (Array.isArray(b.items) ? b.items : []).slice(0, 2000).map(sarprasAsset).filter((x) => x.name);

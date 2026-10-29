@@ -339,7 +339,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 17</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 18</span>
       </div>
     </aside>
     <div class="main">

@@ -225,7 +225,9 @@ Halaman **/sarpras** menggantikan aplikasi lama `sarprassmkn8sby.web.app`. Selur
 
 **Siapa yang bisa mengelola:** akun **admin** dan akun **Waka Sarpras** (`waka.sarpras`, unit *Waka Sarana Prasarana*). Pengunjung lain hanya bisa melihat (sama seperti "Mode Publik" di aplikasi lama). Tombol **Login Admin** di SI-SARPRAS membuka halaman login lalu kembali otomatis ke /sarpras.
 
-Catatan: foto aset lama tetap ditautkan ke Google Drive aplikasi lama; foto & berkas baru disimpan di database website. Stiker QR baru mengarah ke `smkn8-sby.sch.id/sarpras?asset=KODE`; kode barang lama tetap sama sehingga dapat dicari lewat menu Scan QR → cari manual.
+**Sinkron dari aplikasi lama** (tombol di menu Inventaris, mode pengelola): menarik aset baru, perubahan data, foto, BAST/BAPB, dan lokasi terbaru dari `sarprassmkn8sby.web.app`, lalu menyalin foto Google Drive ke database website. Aset yang sudah diubah di website baru tidak ditimpa; aset yang dihapus di aplikasi lama tidak ikut dihapus. Bisa diklik berulang kali selama masa peralihan.
+
+Catatan: foto yang gagal disalin tetap ditampilkan langsung dari Google Drive aplikasi lama; foto & berkas baru disimpan di database website. Stiker QR baru mengarah ke `smkn8-sby.sch.id/sarpras?asset=KODE`; kode barang lama tetap sama sehingga dapat dicari lewat menu Scan QR → cari manual.
 
 ## Backup & Pemulihan (menu admin)
 
