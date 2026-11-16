@@ -240,3 +240,19 @@ Menu **Backup & Pemulihan** (khusus admin, di grup *Sekolah*) melindungi data we
 
 Lapisan pengaman tambahan: Cloudflare D1 memiliki fitur **Time Travel** yang dapat mengembalikan seluruh database ke titik waktu tertentu (beberapa hari terakhir, tergantung paket akun Cloudflare). Caranya lewat terminal:
 `npx wrangler d1 time-travel info smkn8sby-db` lalu `npx wrangler d1 time-travel restore smkn8sby-db --timestamp=<waktu>`.
+
+## Pesan Masuk & Notifikasi email
+
+**Siapa yang bisa membaca Pesan Masuk:** admin, akun **BKK**, dan akun **Waka Humas** (menu *Pesan Masuk* di grup unitnya, lengkap dengan jumlah pesan belum dibaca). Ketiganya bisa membalas lewat email/WhatsApp dan menandai dibaca; **menghapus pesan hanya bisa oleh admin**. Akun lain (jurusan, LSP, TEFA, Waka lain) tidak bisa membuka pesan.
+
+**Notifikasi email:** setiap pesan baru dari formulir kontak otomatis dikirim juga ke email yang diatur di *Pengaturan Situs → Notifikasi email pesan masuk* (bawaan: `email@smkn8-sby.sch.id`, boleh beberapa alamat dipisah koma). Tombol **Balas** di email langsung membalas ke pengirim. Pengiriman memakai layanan **Resend** (gratis 100 email/hari, 3.000/bulan).
+
+Cara mengaktifkan (sekali saja):
+1. Daftar gratis di **resend.com** → menu **Domains → Add Domain** → isi `smkn8-sby.sch.id`.
+2. Resend menampilkan beberapa catatan DNS (DKIM, SPF/MX untuk subdomain `send`). Tambahkan di **Cloudflare → smkn8-sby.sch.id → DNS → Records** persis seperti yang diminta, lalu klik **Verify** di Resend. Catatan ini memakai subdomain khusus, sehingga **tidak mengganggu email sekolah yang sudah ada**.
+3. Di Resend buka **API Keys → Create API Key** (izin *Sending access*), salin kuncinya (`re_…`).
+4. Di Cloudflare buka **Workers & Pages → smkn8sby-website → Settings → Variables and Secrets → Add**: Type **Secret**, Name `RESEND_API_KEY`, Value kunci tadi, untuk **Production** → Save.
+5. Lakukan deploy ulang (Deployments → ⋯ → Retry deployment) agar kunci terbaca.
+6. Panel admin → Pengaturan Situs → *Notifikasi email pesan masuk* → **Kirim email uji coba**. Status berubah menjadi **Aktif** bila berhasil.
+
+Selama kunci belum dipasang, pesan tetap tersimpan di panel seperti biasa (hanya tidak dikirim ke email).
