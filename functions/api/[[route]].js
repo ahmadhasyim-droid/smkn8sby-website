@@ -13,7 +13,7 @@ const JURUSAN = new Set(DEFAULT_UNITS.filter((u) => u.type === 'jurusan').map((u
 const SESSION_DAYS = 7;
 const MAX_MEDIA_BYTES = 1_900_000;
 const ROLES = ['admin', 'unit'];
-const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded', 'prestasi_seeded', 'sarpras_seeded', 'backup_interval'];
+const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded', 'prestasi_seeded', 'sarpras_seeded', 'backup_interval', 'notif_email', 'notif_from', 'notif_last'];
 const FEED_TTL = 60 * 60 * 1000; // feed YouTube/Instagram diperbarui tiap 1 jam
 
 // ---------------- feed YouTube & Instagram ----------------
@@ -212,6 +212,40 @@ async function seedLowongan(db) {
   const t = now();
   await db.batch(LOWONGAN_SEED.map((j) => db.prepare(`INSERT OR IGNORE INTO lowongan(skey,company,position,location,job_type,majors,description,apply_link,poster,status,created_at)
     VALUES(?,?,?,?,?,?,?,?,?,'buka',?)`).bind(j.skey, j.company, j.position, j.location, j.job_type, j.majors, j.description, j.apply_link, j.poster, t)));
+}
+
+// ---------------- NOTIFIKASI EMAIL PESAN MASUK ----------------
+// Pesan masuk boleh dibaca admin, BKK, dan Waka Humas
+const canMessages = (user) => user.role === 'admin' || isBkk(user);
+const EMAIL_RE = /^[^\s@<>,]+@[^\s@<>,]+\.[^\s@<>,]+$/;
+const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Kirim lewat Resend (resend.com). Butuh variabel rahasia RESEND_API_KEY di Cloudflare Pages.
+async function sendNotif(env, db, m, test = false) {
+  const get = async (k, d) => (await db.prepare(`SELECT value FROM settings WHERE key=?`).bind(k).first('value')) || d;
+  const to = String(await get('notif_email', '')).split(/[,;\s]+/).filter((x) => EMAIL_RE.test(x)).slice(0, 5);
+  const from = String(await get('notif_from', 'noreply@smkn8-sby.sch.id')).trim();
+  const school = await get('school_short', 'SMKN 8 Surabaya');
+  const log = (v) => db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('notif_last',?)`).bind(v).run();
+  if (!env.RESEND_API_KEY) { if (test) throw new Error('RESEND_API_KEY belum diisi di pengaturan Cloudflare Pages.'); return; }
+  if (!to.length) { if (test) throw new Error('Alamat email tujuan belum diisi.'); return; }
+  const rows = [['Nama', m.name], ['Email', m.email], ['Telepon/WA', m.phone], ['Subjek', m.subject]].filter(([, v]) => v);
+  const html = `<div style="font-family:Arial,sans-serif;max-width:620px;color:#17202c">
+    <div style="background:#0d1a2e;color:#fff;padding:16px 20px;border-radius:8px 8px 0 0"><b>${escHtml(test ? 'Uji coba notifikasi' : 'Pesan baru dari website')}</b><br><span style="color:#84b2df;font-size:13px">${escHtml(school)} · smkn8-sby.sch.id</span></div>
+    <div style="border:1px solid #d9dee6;border-top:0;padding:18px 20px;border-radius:0 0 8px 8px">
+      <table style="font-size:14px;border-collapse:collapse;margin-bottom:12px">${rows.map(([k, v]) => `<tr><td style="padding:3px 14px 3px 0;color:#5a6474">${k}</td><td style="padding:3px 0"><b>${escHtml(v)}</b></td></tr>`).join('')}</table>
+      <div style="white-space:pre-wrap;font-size:14px;line-height:1.6;background:#f3f4f6;padding:14px;border-radius:6px">${escHtml(m.message)}</div>
+      <p style="font-size:12px;color:#5a6474;margin-top:16px">Balas email ini untuk langsung menjawab pengirim${m.email ? '' : ' (pengirim tidak mencantumkan email)'}. Pesan juga tersimpan di Panel Admin → Pesan Masuk.</p></div></div>`;
+  const payload = { from: `Website ${school} <${from}>`, to, subject: `[Website] ${m.subject || 'Pesan baru'} — ${m.name}`, html };
+  if (m.email && EMAIL_RE.test(m.email)) payload.reply_to = m.email;
+  try {
+    const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.message || d.error || ('HTTP ' + r.status));
+    await log(`ok|${now()}|${to.join(', ')}`);
+  } catch (e) {
+    await log(`gagal|${now()}|${String(e.message || e).slice(0, 200)}`);
+    if (test) throw new Error('Email gagal dikirim: ' + (e.message || e));
+  }
 }
 
 // ---------------- BACKUP & PEMULIHAN ----------------
@@ -822,8 +856,10 @@ export async function onRequest(ctx) {
       if (b.website) return json({ ok: true }); // honeypot anti-spam
       const name = str(b.name, 100), message = str(b.message, 3000);
       if (!name || message.length < 5) return err('Nama dan pesan wajib diisi.');
+      const msg = { name, email: str(b.email, 120), phone: str(b.phone, 30), subject: str(b.subject, 150), message };
       await db.prepare(`INSERT INTO messages(name,email,phone,subject,message,created_at) VALUES(?,?,?,?,?,?)`)
-        .bind(name, str(b.email, 120), str(b.phone, 30), str(b.subject, 150), message, now()).run();
+        .bind(msg.name, msg.email, msg.phone, msg.subject, msg.message, now()).run();
+      ctx.waitUntil(sendNotif(env, db, msg).catch(() => {})); // kirim email di belakang layar
       return json({ ok: true });
     }
 
@@ -912,10 +948,10 @@ export async function onRequest(ctx) {
       const extra = {};
       if (isAdmin) {
         extra.users = (await db.prepare(`SELECT COUNT(*) n FROM users`).first()).n;
-        extra.unread = (await db.prepare(`SELECT COUNT(*) n FROM messages WHERE is_read=0`).first()).n;
         extra.backup_last = (await db.prepare(`SELECT created_at FROM backup_log WHERE kind='unduh' ORDER BY id DESC LIMIT 1`).first('created_at')) || null;
         extra.backup_interval = clampInt(await db.prepare(`SELECT value FROM settings WHERE key='backup_interval'`).first('value'), 7, 1, 90);
       }
+      if (canMessages(user)) extra.unread = (await db.prepare(`SELECT COUNT(*) n FROM messages WHERE is_read=0`).first()).n;
       if (isAdmin || isBkk(user)) extra.lowongan = (await db.prepare(`SELECT COUNT(*) n FROM lowongan WHERE status='buka'`).first()).n;
       if (isAdmin || user.unit_slug === 'lsp') extra.skema = (await db.prepare(`SELECT COUNT(*) n FROM skema`).first()).n;
       return json({ posts, agenda, gallery, views, recent: recent.results, ...extra });
@@ -956,7 +992,7 @@ export async function onRequest(ctx) {
         const s = await db.prepare(`SELECT key,value FROM settings`).all();
         const out = Object.fromEntries(s.results.filter((r) => r.key !== 'ig_token_refreshed').map((r) => [r.key, r.value]));
         out.ig_token = out.ig_token ? '••••••' + out.ig_token.slice(-4) : '';
-        return json({ settings: out });
+        return json({ settings: out, notif: { ready: !!env.RESEND_API_KEY, last: out.notif_last || '' } });
       }
       if (method === 'PUT') {
         const b = await body();
@@ -968,6 +1004,14 @@ export async function onRequest(ctx) {
         if (stmts.length) await db.batch(stmts);
         return json({ ok: true });
       }
+    }
+
+    // Uji kirim email notifikasi (khusus admin)
+    if (area === 'notif-test' && method === 'POST') {
+      if (!isAdmin) return err('Khusus admin.', 403);
+      try { await sendNotif(env, db, { name: user.name || user.username, email: '', phone: '', subject: 'Uji coba notifikasi', message: 'Ini email uji coba dari Panel Admin website. Bila email ini diterima, notifikasi pesan masuk sudah berjalan.' }, true); }
+      catch (e) { return err(e.message, 400); }
+      return json({ ok: true });
     }
 
     // Pengguna (khusus admin)
@@ -1011,13 +1055,16 @@ export async function onRequest(ctx) {
       }
     }
 
-    // Pesan masuk (khusus admin)
+    // Pesan masuk (admin, BKK, Waka Humas)
     if (area === 'messages') {
-      if (!isAdmin) return err('Khusus admin.', 403);
+      if (!canMessages(user)) return err('Menu ini khusus admin, BKK, dan Waka Humas.', 403);
       const id = parts[2] ? clampInt(parts[2], 0, 0, 1e12) : null;
       if (method === 'GET') return json({ items: (await db.prepare(`SELECT * FROM messages ORDER BY id DESC LIMIT 200`).all()).results });
       if (method === 'PUT' && id) { await db.prepare(`UPDATE messages SET is_read=1 WHERE id=?`).bind(id).run(); return json({ ok: true }); }
-      if (method === 'DELETE' && id) { await db.prepare(`DELETE FROM messages WHERE id=?`).bind(id).run(); return json({ ok: true }); }
+      if (method === 'DELETE' && id) {
+        if (!isAdmin) return err('Hanya admin yang dapat menghapus pesan.', 403);
+        await db.prepare(`DELETE FROM messages WHERE id=?`).bind(id).run(); return json({ ok: true });
+      }
     }
 
     // CRUD umum: posts, agenda, gallery, lowongan, skema

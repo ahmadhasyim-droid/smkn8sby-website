@@ -319,7 +319,7 @@ function menu() {
     groups.push(['Sekolah', [['settings', 'Pengaturan Situs', 'gear'], ['users', 'Pengguna & Akses', 'users'], ['messages', 'Pesan Masuk', 'mail'], ['backup', 'Backup & Pemulihan', 'shield']]]);
   } else {
     const g = [[`units/${u}`, 'Profil Unit', 'unit']];
-    if (isBkk()) g.push(['lowongan', 'Lowongan Kerja (BKK)', 'job']);
+    if (isBkk()) g.push(['lowongan', 'Lowongan Kerja (BKK)', 'job'], ['messages', 'Pesan Masuk', 'mail']);
     if (isBkk() || UNIT[u]?.type === 'jurusan') g.push(['dudi', 'DUDI / Mitra Industri', 'handshake']);
     if (u === 'lsp') g.push(['skema', 'Skema Sertifikasi', 'badge']);
     if (u === 'waka-sarpras') g.push(['/sarpras', 'SI-SARPRAS (Inventaris)', 'box']);
@@ -339,7 +339,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 18</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 19</span>
       </div>
     </aside>
     <div class="main">
@@ -528,7 +528,7 @@ V.units = async (view, slug) => {
 // Pengaturan situs
 V.settings = async (view) => {
   setHead('Pengaturan Situs');
-  const { settings: s } = await api('admin/settings');
+  const { settings: s, notif } = await api('admin/settings');
   const groups = [
     ['Identitas sekolah', [
       { k: 'school_name', label: 'Nama sekolah', half: true }, { k: 'school_short', label: 'Nama singkat', half: true },
@@ -561,6 +561,10 @@ V.settings = async (view) => {
       { k: 'ig_token', label: 'Atau: Instagram access token (dari Meta Developer)', help: 'Opsional. Cara mendapatkannya ada di README bagian "Feed Instagram otomatis". Token diperpanjang otomatis oleh sistem dan tidak pernah ditampilkan ke pengunjung.' },
       { k: 'ig_posts', label: 'Atau: link postingan Instagram pilihan (satu per baris, maks. 6)', type: 'textarea', rows: 4, help: 'Dipakai bila token belum diisi. Contoh: https://www.instagram.com/p/XXXXXXXX/' },
     ]],
+    ['Notifikasi email pesan masuk', [
+      { k: 'notif_email', label: 'Kirim salinan setiap pesan masuk ke email', type: 'text', placeholder: 'email@smkn8-sby.sch.id', help: 'Boleh lebih dari satu, pisahkan dengan koma (maks. 5). Kosongkan untuk mematikan.' },
+      { k: 'notif_from', label: 'Alamat pengirim', type: 'text', placeholder: 'noreply@smkn8-sby.sch.id', help: 'Harus memakai domain yang sudah diverifikasi di Resend (lihat README bagian "Notifikasi email").' },
+    ]],
     ['Kontak & media sosial', [
       { k: 'address', label: 'Alamat' }, { k: 'maps_query', label: 'Kata kunci peta Google Maps', help: 'Nama/alamat sekolah persis seperti di Google Maps.' },
       { k: 'email', label: 'Email', type: 'email', half: true }, { k: 'phone', label: 'Telepon', half: true }, { k: 'whatsapp', label: 'WhatsApp', half: true },
@@ -571,6 +575,22 @@ V.settings = async (view) => {
   view.innerHTML = `<form id="f">${groups.map(([t, fs]) => `<div class="box"><h3>${esc(t)}</h3><div class="fields">${fs.map((f) => fieldHtml(f, s[f.k])).join('')}</div></div>`).join('')}
     <div class="form-actions" style="position:sticky;bottom:0;background:var(--paper);padding:12px 0"><button class="btn btn-primary">Simpan pengaturan</button></div></form>`;
   bindForm(view, all);
+  // Status & uji notifikasi email
+  const nf = [...$$('.box', view)].find((b) => b.querySelector('h3')?.textContent.startsWith('Notifikasi email'));
+  if (nf) {
+    const [st, at, info] = String(notif?.last || '').split('|');
+    const status = !notif?.ready ? '<span class="tag bad">Belum aktif</span> Kunci <b>RESEND_API_KEY</b> belum dipasang di Cloudflare Pages — pesan tetap tersimpan di panel, tetapi belum dikirim ke email.'
+      : st === 'ok' ? `<span class="tag ok">Aktif</span> Terakhir terkirim ${fmtDate(at)} ke ${esc(info)}.`
+      : st === 'gagal' ? `<span class="tag bad">Gagal</span> Percobaan terakhir ${fmtDate(at)}: ${esc(info)}`
+      : '<span class="tag ok">Siap</span> Belum ada email terkirim. Klik "Kirim email uji coba" setelah menyimpan pengaturan.';
+    nf.insertAdjacentHTML('beforeend', `<div class="notice info" style="margin-top:12px">${status}</div><button type="button" class="btn btn-line btn-sm" id="nTest">Kirim email uji coba</button>`);
+    $('#nTest').onclick = async () => {
+      const b = $('#nTest'); b.disabled = true;
+      try { await api('admin/settings', { method: 'PUT', body: readForm(view, all) }); await api('admin/notif-test', { method: 'POST', body: {} }); toast('Email uji coba terkirim. Periksa kotak masuk (dan folder Spam).'); }
+      catch (er) { toast(er.message, true); }
+      b.disabled = false;
+    };
+  }
   $('#f').onsubmit = async (e) => { e.preventDefault(); try { await api('admin/settings', { method: 'PUT', body: readForm(view, all) }); toast('Pengaturan tersimpan'); } catch (er) { toast(er.message, true); } };
 };
 
@@ -630,7 +650,7 @@ V.messages = async (view) => {
       ${m.subject ? `<div style="font-weight:700;margin-top:6px">${esc(m.subject)}</div>` : ''}<p>${esc(m.message)}</p>
       <div style="display:flex;gap:6px">${m.email ? `<a class="btn btn-line btn-sm" href="mailto:${esc(m.email)}?subject=${encodeURIComponent('Re: ' + (m.subject || 'Pesan Anda'))}">Balas email</a>` : ''}
       ${m.phone ? `<a class="btn btn-line btn-sm" target="_blank" href="https://wa.me/${esc(m.phone.replace(/\D/g, '').replace(/^0/, '62'))}">WhatsApp</a>` : ''}
-      ${m.is_read ? '' : `<button class="btn btn-dark btn-sm" data-read="${m.id}">Tandai dibaca</button>`}<button class="btn btn-danger btn-sm" data-del="${m.id}">Hapus</button></div></div>`).join('') : '<div class="box empty">Belum ada pesan.</div>';
+      ${m.is_read ? '' : `<button class="btn btn-dark btn-sm" data-read="${m.id}">Tandai dibaca</button>`}${isAdmin() ? `<button class="btn btn-danger btn-sm" data-del="${m.id}">Hapus</button>` : ''}</div></div>`).join('') : '<div class="box empty">Belum ada pesan.</div>';
   };
   view.onclick = async (e) => {
     const r = e.target.closest('[data-read]'), d = e.target.closest('[data-del]');
@@ -803,6 +823,7 @@ async function route() {
   window.scrollTo(0, 0);
   try {
     if (!a || a === 'dashboard') return await V.dashboard(view);
+    if (a === 'messages' && !isAdmin() && !isBkk()) throw new Error('Menu ini khusus admin, BKK, dan Waka Humas.');
     if (RES[a]) {
       if (a === 'program' && !isAdmin() && UNIT[ME.unit_slug]?.type !== 'waka') throw new Error('Menu ini khusus admin dan wakil kepala sekolah.');
       if (a === 'lowongan' && !isAdmin() && !isBkk()) throw new Error('Menu ini khusus BKK dan Waka Humas.');
@@ -811,12 +832,12 @@ async function route() {
       return b ? await editView(view, a, b === 'new' ? null : b) : await listView(view, a);
     }
     if (a === 'units') return await V.units(view, b);
-    if (V[a] && (isAdmin() || ['gallery', 'account'].includes(a))) return await V[a](view);
+    if (V[a] && (isAdmin() || ['gallery', 'account'].includes(a) || (a === 'messages' && isBkk()))) return await V[a](view);
     throw new Error('Halaman tidak ditemukan atau Anda tidak memiliki akses.');
   } catch (e) { setHead('Oops'); view.innerHTML = `<div class="notice bad">${esc(e.message)}</div>`; }
 }
 async function refreshUnread() {
-  if (!isAdmin()) return;
+  if (!isAdmin() && !isBkk()) return;
   try { const d = await api('admin/dashboard'); const el = $('#unread'); if (el) { el.textContent = d.unread; el.hidden = !d.unread; } } catch { /* abaikan */ }
 }
 async function loadUnits() {
