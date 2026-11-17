@@ -219,6 +219,31 @@ async function seedLowongan(db) {
     VALUES(?,?,?,?,?,?,?,?,?,'buka',?)`).bind(j.skey, j.company, j.position, j.location, j.job_type, j.majors, j.description, j.apply_link, j.poster, t)));
 }
 
+// ---------------- VIDEO BERITA (YouTube / TikTok / Instagram) ----------------
+const VIDEO_HOST = /(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com|tiktok\.com|instagram\.com)$/i;
+// Merapikan link video; link pendek TikTok (vt./vm.tiktok.com) diikuti agar mendapat nomor videonya
+async function normalizeVideo(raw) {
+  let u = String(raw || '').trim();
+  if (!u) return '';
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  let url; try { url = new URL(u); } catch { throw new Error('Link video tidak valid.'); }
+  if (!VIDEO_HOST.test(url.hostname)) throw new Error('Link video harus dari YouTube, TikTok, atau Instagram.');
+  if (/tiktok\.com$/i.test(url.hostname) && !/\/video\/\d+/.test(url.pathname)) {
+    try {
+      let next = url.href;
+      for (let i = 0; i < 4; i++) {
+        const r = await fetch(next, { method: 'GET', redirect: 'manual', headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SMKN8-Website)' } });
+        const loc = r.headers.get('Location'); if (!loc) break;
+        next = new URL(loc, next).href;
+        if (/\/video\/\d+/.test(next)) { url = new URL(next); break; }
+      }
+    } catch (_) { /* biarkan link asli */ }
+    url.search = '';
+  }
+  if (/instagram\.com$/i.test(url.hostname)) url.search = '';
+  return url.href.slice(0, 300);
+}
+
 // ---------------- NOTIFIKASI EMAIL PESAN MASUK ----------------
 // Pesan masuk boleh dibaca admin, BKK, dan Waka Humas
 const canMessages = (user) => user.role === 'admin' || isBkk(user);
@@ -611,7 +636,7 @@ const publicUser = (u) => u && ({ id: u.id, username: u.username, name: u.name, 
 const RESOURCES = {
   posts: {
     table: 'posts', scope: 'unit', order: 'COALESCE(published_at,created_at) DESC',
-    fields: { title: 200, excerpt: 400, content: 'html', cover: 300, category: 30, unit_slug: 40, status: 20, featured: 'bool', published_at: 40 },
+    fields: { title: 200, excerpt: 400, content: 'html', cover: 300, video_url: 300, category: 30, unit_slug: 40, status: 20, featured: 'bool', published_at: 40 },
     required: ['title'],
   },
   agenda: {
@@ -761,7 +786,7 @@ export async function onRequest(ctx) {
         if (!post) return err('Berita tidak ditemukan', 404);
         ctx.waitUntil(db.prepare(`UPDATE posts SET views=views+1 WHERE id=?`).bind(post.id).run());
         const guruPost = GURU_CATS.includes(post.category);
-        const related = await db.prepare(`SELECT slug,title,cover,category,unit_slug,published_at FROM posts
+        const related = await db.prepare(`SELECT slug,title,cover,video_url,category,unit_slug,published_at FROM posts
           WHERE status='publish' AND id<>? AND ${guruPost ? `category IN ('opini','tips','artikel')` : 'unit_slug=?'} ORDER BY published_at DESC LIMIT 3`).bind(...(guruPost ? [post.id] : [post.id, post.unit_slug])).all();
         delete post.review_note; delete post.reviewed_by; delete post.reviewed_at; delete post.submitted_at;
         return json({ post, related: related.results });
@@ -775,7 +800,7 @@ export async function onRequest(ctx) {
       const limit = clampInt(q.get('limit'), 9, 1, 50), page = clampInt(q.get('page'), 1, 1, 9999);
       const w = where.join(' AND ');
       const [rows, total] = await Promise.all([
-        db.prepare(`SELECT id,slug,title,excerpt,cover,category,unit_slug,featured,views,author_name,author_title,published_at FROM posts WHERE ${w}
+        db.prepare(`SELECT id,slug,title,excerpt,cover,video_url,category,unit_slug,featured,views,author_name,author_title,published_at FROM posts WHERE ${w}
           ORDER BY published_at DESC LIMIT ? OFFSET ?`).bind(...args, limit, (page - 1) * limit).all(),
         db.prepare(`SELECT COUNT(*) n FROM posts WHERE ${w}`).bind(...args).first(),
       ]);
@@ -1119,6 +1144,7 @@ export async function onRequest(ctx) {
         if (b.content !== undefined) { edits.content = cleanHtml(String(b.content || "")); edits.excerpt = textOnly(edits.content).slice(0, 220); }
         if (b.category !== undefined && GURU_CATS.includes(b.category)) edits.category = b.category;
         if (b.cover !== undefined) edits.cover = str(b.cover, 300);
+        if (b.video_url !== undefined) edits.video_url = await normalizeVideo(b.video_url);
         const who = user.name || user.username;
         if (b.action === 'approve') Object.assign(edits, { status: 'publish', published_at: post.published_at || now(), reviewed_by: who, reviewed_at: now(), review_note: note || null });
         else if (b.action === 'reject') { if (!note) return err('Tuliskan catatan revisi untuk penulis.'); Object.assign(edits, { status: 'ditolak', reviewed_by: who, reviewed_at: now(), review_note: note }); }
@@ -1162,7 +1188,7 @@ export async function onRequest(ctx) {
         if (q.get('q') && area === 'prestasi') { where.push('(title LIKE ? OR students LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
         if (q.get('q') && area === 'dudi') { where.push('(name LIKE ? OR address LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
         const limit = clampInt(q.get('limit'), 20, 1, 100), page = clampInt(q.get('page'), 1, 1, 9999);
-        const cols = area === 'posts' ? 'id,slug,title,cover,category,unit_slug,status,featured,views,author_name,published_at,submitted_at,review_note,reviewed_by,reviewed_at' : '*';
+        const cols = area === 'posts' ? 'id,slug,title,cover,video_url,category,unit_slug,status,featured,views,author_name,published_at,submitted_at,review_note,reviewed_by,reviewed_at' : '*';
         const [rows, total] = await Promise.all([
           db.prepare(`SELECT ${cols} FROM ${res.table} WHERE ${where.join(' AND ')} ORDER BY ${res.order} LIMIT ? OFFSET ?`).bind(...args, limit, (page - 1) * limit).all(),
           db.prepare(`SELECT COUNT(*) n FROM ${res.table} WHERE ${where.join(' AND ')}`).bind(...args).first(),
@@ -1200,6 +1226,7 @@ export async function onRequest(ctx) {
         if (method === 'PUT') for (const r of res.required) if (r in data && !data[r]) return err(`Kolom "${r}" wajib diisi.`);
 
         if (area === 'posts') {
+          if ('video_url' in data) data.video_url = await normalizeVideo(data.video_url);
           if (data.content !== undefined && !data.excerpt) data.excerpt = textOnly(data.content).slice(0, 220);
           if (isGuru(user)) {
             // Guru: kategori terbatas, tidak bisa terbit sendiri — dikirim ke WMM untuk disetujui
@@ -1241,6 +1268,7 @@ export async function onRequest(ctx) {
   } catch (e) {
     console.error(e);
     if (/UNIQUE constraint failed: dudi/i.test(String(e && e.message))) return err('DUDI dengan nama yang sama sudah ada di jurusan tersebut.', 409);
+    if (/^Link video/.test(String(e && e.message))) return err(e.message, 400);
     return err('Terjadi kesalahan server: ' + (e && e.message ? e.message : e), 500);
   }
 }

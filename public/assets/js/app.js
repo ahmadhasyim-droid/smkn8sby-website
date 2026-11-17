@@ -105,17 +105,39 @@ function sanitize(html) {
   return doc.body.firstChild.innerHTML;
 }
 
+
+// ---------- Video berita: YouTube, TikTok, Instagram ----------
+function parseVideo(raw) {
+  const u = String(raw || '').trim(); if (!u) return null;
+  let m = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/);
+  if (m) { const shorts = /\/shorts\//.test(u); return { kind: 'youtube', label: 'YouTube', id: m[1], vertical: shorts, link: shorts ? `https://www.youtube.com/shorts/${m[1]}` : `https://www.youtube.com/watch?v=${m[1]}`,
+    embed: `https://www.youtube-nocookie.com/embed/${m[1]}?rel=0`, thumb: `https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg` }; }
+  m = u.match(/tiktok\.com\/.*\/video\/(\d+)/);
+  if (m) return { kind: 'tiktok', label: 'TikTok', id: m[1], vertical: true, link: u, embed: `https://www.tiktok.com/embed/v2/${m[1]}` };
+  m = u.match(/instagram\.com\/(?:[\w.]+\/)?(reel|reels|p|tv)\/([\w-]+)/);
+  if (m) { const t = m[1] === 'p' ? 'p' : 'reel'; return { kind: 'instagram', label: 'Instagram', id: m[2], vertical: true, ig: true, link: `https://www.instagram.com/${t}/${m[2]}/`, embed: `https://www.instagram.com/${t}/${m[2]}/embed/` }; }
+  if (/tiktok\.com|instagram\.com|youtube\.com|youtu\.be/.test(u)) return { kind: 'link', label: /tiktok/.test(u) ? 'TikTok' : /instagram/.test(u) ? 'Instagram' : 'YouTube', link: u };
+  return null;
+}
+const videoBlock = (raw, title = 'Video') => {
+  const v = parseVideo(raw); if (!v) return '';
+  const open = `<a class="video-open" href="${esc(v.link)}" target="_blank" rel="noopener">Buka di ${v.label} ↗</a>`;
+  if (!v.embed) return `<div class="post-video">${open}</div>`;
+  return `<div class="post-video${v.vertical ? ' vertical' : ''}${v.ig ? ' ig' : ''}"><div class="pv-frame"><iframe src="${esc(v.embed)}" title="${esc(title)}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen scrolling="no"></iframe></div>${open}</div>`;
+};
+
 const cover = (post, cls = '') => {
   const u = unitOf(post.unit_slug);
-  return post.cover
-    ? `<img src="${esc(post.cover)}" alt="" loading="lazy" class="${cls}">`
+  const vthumb = !post.cover && parseVideo(post.video_url)?.thumb;
+  return post.cover || vthumb
+    ? `<img src="${esc(post.cover || vthumb)}" alt="" loading="lazy" class="${cls}">`
     : `<div class="ph-cover ${cls}" style="--c:${u.color}">${icon(u.icon || u.slug)}</div>`;
 };
 const unitBadge = (slug, soft) => { const u = unitOf(slug); return `<span class="badge${soft ? ' soft' : ''}" style="--c:${u.color}">${esc(u.short || u.name)}</span>`; };
 
 const postCard = (p, feature = false) => `
   <a class="card${feature ? ' news-feature' : ''}" href="/berita/${encodeURIComponent(p.slug)}">
-    <div class="thumb">${cover(p)}${unitBadge(p.unit_slug)}</div>
+    <div class="thumb">${cover(p)}${unitBadge(p.unit_slug)}${p.video_url ? `<span class="play-badge" title="Ada video">▶ ${esc(parseVideo(p.video_url)?.label || 'Video')}</span>` : ''}</div>
     <div class="body">
       <div class="meta"><span>${icon('calendar')}${fmtDate(p.published_at)}</span><span>${esc(CATS[p.category] || 'Berita')}</span></div>
       <h3>${esc(p.title)}</h3>
@@ -704,6 +726,7 @@ PAGES.artikel = async (main) => {
     <article>
       ${p.cover ? `<div class="article-cover"><img src="${esc(p.cover)}" alt=""></div>` : ''}
       <div class="article-body">${sanitize(p.content)}</div>
+      ${videoBlock(p.video_url, 'Video: ' + p.title)}
       ${isGuru ? `<div class="author-box"><span class="av-i lg">${esc(nameInitials(p.author_name))}</span><div><span class="mono" style="color:var(--muted)">Tentang penulis</span><b>${esc(p.author_name)}</b><span>${esc(p.author_title || 'Guru SMK Negeri 8 Surabaya')}</span></div></div>
         <p class="t-note">Tulisan ini merupakan karya guru SMK Negeri 8 Surabaya dan telah melalui pemeriksaan Waka Manajemen Mutu sebelum dipublikasikan.</p>` : ''}
       <div class="share"><span class="mono" style="color:var(--muted)">Bagikan</span>

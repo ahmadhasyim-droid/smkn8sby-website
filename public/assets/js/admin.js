@@ -163,6 +163,28 @@ function readForm(root, fields) {
   return out;
 }
 
+// Pratinjau video (YouTube / TikTok / Instagram) di formulir berita
+function parseVideo(raw) {
+  const u = String(raw || '').trim(); if (!u) return null;
+  let m = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/);
+  if (m) return { label: 'YouTube', vertical: /\/shorts\//.test(u), embed: `https://www.youtube-nocookie.com/embed/${m[1]}?rel=0` };
+  m = u.match(/tiktok\.com\/.*\/video\/(\d+)/); if (m) return { label: 'TikTok', vertical: true, embed: `https://www.tiktok.com/embed/v2/${m[1]}` };
+  m = u.match(/instagram\.com\/(?:[\w.]+\/)?(reel|reels|p|tv)\/([\w-]+)/); if (m) return { label: 'Instagram', vertical: true, ig: true, embed: `https://www.instagram.com/${m[1] === 'p' ? 'p' : 'reel'}/${m[2]}/embed/` };
+  if (/vt\.tiktok|vm\.tiktok|tiktok\.com\/t\//.test(u)) return { label: 'TikTok', short: true };
+  return { bad: true };
+}
+function bindVideoPreview(root) {
+  const inp = $('[name="video_url"]', root); if (!inp) return;
+  const box = document.createElement('div'); box.className = 'vprev'; inp.closest('.field').appendChild(box);
+  const draw = () => {
+    const v = parseVideo(inp.value);
+    box.innerHTML = !v ? '' : v.bad ? '<small style="color:var(--bad)">Link belum dikenali. Gunakan link video YouTube, TikTok, atau Reels/postingan Instagram.</small>'
+      : v.short ? '<small>Link pendek TikTok terdeteksi. Pratinjau muncul setelah disimpan (sistem otomatis mencari alamat lengkapnya).</small>'
+      : `<div class="vp${v.vertical ? ' vertical' : ''}${v.ig ? ' ig' : ''}"><iframe src="${esc(v.embed)}" title="Pratinjau video" loading="lazy" allowfullscreen scrolling="no"></iframe></div><small>Pratinjau ${v.label}: video ini akan tampil di bawah isi berita.</small>`;
+  };
+  let t; inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(draw, 400); }); draw();
+}
+
 // ---------- Definisi menu konten ----------
 const STATUS = () => [{ v: 'publish', l: 'Terbit' }, { v: 'draft', l: 'Draf' }];
 const GURU_CATS = () => [{ v: 'opini', l: 'Opini' }, { v: 'tips', l: 'Tips & Tutorial' }, { v: 'artikel', l: 'Artikel Praktis' }];
@@ -176,13 +198,14 @@ const RES = {
     cols: [
       ['', (r) => (r.cover ? `<img class="thumb" src="${esc(r.cover)}" alt="">` : `<span class="thumb" style="display:block"></span>`)],
       ['Judul', (r) => `<span class="t-title">${esc(r.title)}</span><span class="t-sub">${fmtDate(r.published_at)} · ${esc(r.author_name || '')} · ${r.views || 0}× dibaca</span>`],
-      ['Unit', (r) => (isGuru() ? '' : unitTag(r.unit_slug))],
+      ['Unit', (r) => unitTag(r.unit_slug), 'nonGuru'],
       ['Kategori', (r) => esc(CAT_LABEL[r.category] || r.category)],
       ['Status', (r) => `${statusTag(r.status)}${r.featured ? ' <span class="tag" style="--c:#f26836">Utama</span>' : ''}${r.status === 'ditolak' && r.review_note ? `<span class="t-sub" style="max-width:260px;white-space:normal">Catatan WMM: ${esc(r.review_note)}</span>` : ''}${r.status === 'publish' && r.reviewed_by ? `<span class="t-sub">Disetujui ${esc(r.reviewed_by)}</span>` : ''}`],
     ],
     main: () => [
       { k: 'title', label: 'Judul', required: true, max: 200 },
       { k: 'content', label: isGuru() ? 'Isi tulisan' : 'Isi berita', type: 'rich' },
+      { k: 'video_url', label: 'Link video (opsional): YouTube, TikTok, atau Reels Instagram', type: 'url', placeholder: 'https://www.youtube.com/watch?v=…  ·  https://www.tiktok.com/@akun/video/…  ·  https://www.instagram.com/reel/…', help: 'Tempel link videonya saja. Video otomatis bisa diputar langsung di halaman berita. Pastikan video/akun bersifat publik.' },
       { k: 'excerpt', label: 'Ringkasan (opsional)', type: 'textarea', rows: 2, help: 'Dikosongkan = diambil otomatis dari awal isi berita.' },
     ],
     side: () => isGuru() ? [
@@ -352,7 +375,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 20</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 21</span>
       </div>
     </aside>
     <div class="main">
@@ -410,8 +433,9 @@ async function listView(view, key) {
     </div><div class="table-wrap" id="tbl"></div><div class="pager" id="pg"></div>`;
   const load = async () => {
     const d = await api(`admin/${key}?page=${page}&limit=20${q ? '&q=' + encodeURIComponent(q) : ''}${unit ? '&unit=' + unit : ''}`);
-    $('#tbl').innerHTML = d.items.length ? `<table><thead><tr>${R.cols.map(([h]) => `<th>${h}</th>`).join('')}<th></th></tr></thead><tbody>
-      ${d.items.map((r) => `<tr>${R.cols.map(([, fn]) => `<td>${fn(r)}</td>`).join('')}<td class="act">
+    const cols = R.cols.filter((c) => !(c[2] === 'nonGuru' && isGuru()));
+    $('#tbl').innerHTML = d.items.length ? `<table><thead><tr>${cols.map(([h]) => `<th>${h}</th>`).join('')}<th></th></tr></thead><tbody>
+      ${d.items.map((r) => `<tr>${cols.map(([, fn]) => `<td>${fn(r)}</td>`).join('')}<td class="act">
         ${R.view && R.view(r) ? `<a class="btn btn-line btn-sm" href="${R.view(r)}" target="_blank" title="Lihat">${ic('ext')}</a>` : ''}
         <a class="btn btn-line btn-sm" href="#/${key}/${r.id}">${isGuru() && r.status === 'publish' ? 'Lihat' : 'Ubah'}</a>${isGuru() && r.status === 'publish' ? '' : `<button class="btn btn-danger btn-sm" data-del="${r.id}">Hapus</button>`}</td></tr>`).join('')}
       </tbody></table>` : `<div class="empty">Belum ada data. <a href="#/${key}/new" style="color:var(--blue);font-weight:700">Tambah ${R.single} pertama</a></div>`;
@@ -451,6 +475,7 @@ async function editView(view, key, id) {
       <div class="form-actions">${guruPost ? `<button class="btn btn-line btn-block" type="submit" data-st="draft">Simpan draf</button><button class="btn btn-primary btn-block" type="submit" data-st="review">${ic('check')}Kirim ke WMM</button>` : '<button class="btn btn-primary btn-block" type="submit">Simpan</button>'}</div></div>` : ''}
   </div>${side.length ? '' : `<div class="form-actions"><a class="btn btn-line" href="#/${key}">Batal</a><button class="btn btn-primary" type="submit">Simpan</button></div>`}</form>`;
   bindForm(view, all);
+  if (key === 'posts') bindVideoPreview(view);
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const data = readForm(view, all);
@@ -754,6 +779,7 @@ async function reviewDetail(view, id) {
   const fields = [
     { k: 'title', label: 'Judul', required: true },
     { k: 'content', label: 'Isi tulisan (boleh diperbaiki sebelum disetujui)', type: 'rich' },
+    { k: 'video_url', label: 'Link video (YouTube / TikTok / Reels Instagram)', type: 'url' },
   ];
   const side = [{ k: 'category', label: 'Jenis tulisan', type: 'select', opts: GURU_CATS }, { k: 'cover', label: 'Gambar sampul', type: 'image' }];
   view.innerHTML = `<div class="form-grid"><div class="box"><div class="fields">${fields.map((f) => fieldHtml(f, item[f.k])).join('')}</div></div>
@@ -768,6 +794,7 @@ async function reviewDetail(view, id) {
         <button class="btn btn-line btn-block" data-act="save">Simpan perbaikan saja</button></div></div></div></div>`;
   const all = [...fields, ...side];
   bindForm(view, all);
+  bindVideoPreview(view);
   view.querySelectorAll('[data-act]').forEach((b) => b.onclick = async () => {
     const act = b.dataset.act, note = $('#rvNote').value.trim();
     if (act === 'reject' && !note) return toast('Tuliskan catatan revisi untuk penulis.', true);

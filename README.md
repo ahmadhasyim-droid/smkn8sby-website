@@ -266,3 +266,14 @@ Selama kunci belum dipasang, pesan tetap tersimpan di panel seperti biasa (hanya
 **Persetujuan WMM:** akun **Waka Manajemen Mutu** (dan admin) mendapat menu **Persetujuan Tulisan** dengan angka antrean. Tab *Menunggu / Dikembalikan / Sudah tayang*. Pada *Periksa*, WMM bisa memperbaiki salah ketik, lalu **Setujui & tayangkan** atau **Kembalikan untuk revisi** (wajib menulis catatan; catatan tampil di akun guru). Tulisan yang sudah tayang juga bisa ditarik kembali.
 
 **Di website:** tulisan yang disetujui tampil di *Berita* (filter **Tulisan Guru**, Opini, Tips & Tutorial, Artikel Praktis) dan di menu *Informasi → Opini & Artikel Guru*, lengkap dengan **nama penulis**, jabatan, dan kotak *Tentang penulis*.
+
+## Video di berita (YouTube, TikTok, Reels Instagram)
+
+Di formulir **Berita & Kegiatan** (dan tulisan guru) ada kolom **Link video (opsional)**. Tempel link video, lalu pratinjau langsung tampil di bawah kolom. Setelah disimpan, video **bisa diputar langsung di halaman berita** (di bawah isi berita), lengkap dengan tautan "Buka di YouTube/TikTok/Instagram ↗". Kartu berita di daftar mendapat label **▶ YouTube / TikTok / Instagram**; bila berita tidak punya gambar sampul, thumbnail YouTube dipakai otomatis.
+
+Link yang dikenali:
+- YouTube: `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…` (Shorts tampil tegak)
+- TikTok: `tiktok.com/@akun/video/…`. Link pendek `vt.tiktok.com/…` otomatis dicari alamat lengkapnya saat disimpan.
+- Instagram: `instagram.com/reel/…` atau `instagram.com/p/…`
+
+Video/akun harus **publik** agar bisa diputar di website.
