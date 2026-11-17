@@ -256,3 +256,13 @@ Cara mengaktifkan (sekali saja):
 6. Panel admin → Pengaturan Situs → *Notifikasi email pesan masuk* → **Kirim email uji coba**. Status berubah menjadi **Aktif** bila berhasil.
 
 Selama kunci belum dipasang, pesan tetap tersimpan di panel seperti biasa (hanya tidak dikirim ke email).
+
+## Tulisan Guru (Opini, Tips & Tutorial, Artikel Praktis) + persetujuan WMM
+
+**Peran Guru Penulis** — setiap guru mendapat akun sendiri. Menu yang tampil hanya *Dasbor* dan *Tulisan Saya*. Guru hanya dapat memilih jenis tulisan **Opini**, **Tips & Tutorial**, atau **Artikel Praktis**, dan **tidak dapat menerbitkan sendiri**: tombolnya *Simpan draf* atau *Kirim ke WMM*. Tulisan yang sudah tayang tidak bisa diubah/dihapus oleh guru.
+
+**Membuat akun guru:** Admin → *Pengguna & Akses* → **Tambah guru sekaligus** → tempel daftar guru, satu per baris (`Nama & gelar ; Jabatan/Mapel`, bisa disalin dari Excel). Username & password dibuat otomatis; setelah dibuat, **unduh daftar (CSV)** atau **cetak kartu login** untuk dibagikan — password hanya ditampilkan sekali. Satu per satu juga bisa lewat *Tambah pengguna* → peran *Guru Penulis*.
+
+**Persetujuan WMM:** akun **Waka Manajemen Mutu** (dan admin) mendapat menu **Persetujuan Tulisan** dengan angka antrean. Tab *Menunggu / Dikembalikan / Sudah tayang*. Pada *Periksa*, WMM bisa memperbaiki salah ketik, lalu **Setujui & tayangkan** atau **Kembalikan untuk revisi** (wajib menulis catatan; catatan tampil di akun guru). Tulisan yang sudah tayang juga bisa ditarik kembali.
+
+**Di website:** tulisan yang disetujui tampil di *Berita* (filter **Tulisan Guru**, Opini, Tips & Tutorial, Artikel Praktis) dan di menu *Informasi → Opini & Artikel Guru*, lengkap dengan **nama penulis**, jabatan, dan kotak *Tentang penulis*.

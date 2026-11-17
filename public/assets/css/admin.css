@@ -198,3 +198,9 @@ td.act .btn + .btn { margin-left: 4px; }
 .prog { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; }
 .prog span { display: block; height: 100%; background: var(--blue, #235ba4); transition: width .2s; }
 .notice .ico { width: 16px; height: 16px; vertical-align: -3px; }
+/* Tulisan guru & persetujuan WMM */
+.tag.wait { --c: #b86e00; }
+.notice.ok { background: #e7f6ee; border-color: #b9e3cb; color: #0f5d3a; }
+.rich-view { line-height: 1.7; margin: 10px 0 16px; }
+.rich-view img { max-width: 100%; height: auto; border-radius: 6px; }
+.form-actions [data-st] + [data-st] { margin-top: 8px; }

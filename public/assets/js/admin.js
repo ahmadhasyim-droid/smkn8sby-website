@@ -30,6 +30,8 @@ const P = {
   menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
   shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
   dl: '<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>',
+  pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
+  check: '<path d="M20 6L9 17l-5-5"/>',
   upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
 };
 const ic = (n) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
@@ -51,6 +53,8 @@ const wibDate = (iso) => (iso ? new Date(new Date(iso).getTime() + 7 * 3600e3).t
 let ME = null, UNITS = [], UNIT = {};
 const isAdmin = () => ME.role === 'admin';
 const isBkk = () => ['bkk', 'waka-humas'].includes(ME.unit_slug); // Waka Humas setara BKK (lowongan & DUDI)
+const isGuru = () => ME.role === 'guru'; // guru penulis: opini, tips & tutorial, artikel praktis
+const canReview = () => isAdmin() || ME.unit_slug === 'waka-wmm'; // persetujuan tulisan guru
 const unitName = (slug) => (slug === 'sekolah' ? 'Sekolah (umum)' : UNIT[slug]?.name || slug);
 const unitTag = (slug) => `<span class="tag" style="--c:${slug === 'sekolah' ? '#235ba4' : UNIT[slug]?.color || '#888'}">${esc(slug === 'sekolah' ? 'Sekolah' : UNIT[slug]?.short || slug)}</span>`;
 const unitOptions = () => [{ v: 'sekolah', l: 'Sekolah (umum)' }, ...UNITS.map((u) => ({ v: u.slug, l: u.name }))];
@@ -161,23 +165,30 @@ function readForm(root, fields) {
 
 // ---------- Definisi menu konten ----------
 const STATUS = () => [{ v: 'publish', l: 'Terbit' }, { v: 'draft', l: 'Draf' }];
-const CATS = () => [{ v: 'kegiatan', l: 'Kegiatan' }, { v: 'berita', l: 'Berita' }, { v: 'prestasi', l: 'Prestasi' }, { v: 'pengumuman', l: 'Pengumuman' }];
+const GURU_CATS = () => [{ v: 'opini', l: 'Opini' }, { v: 'tips', l: 'Tips & Tutorial' }, { v: 'artikel', l: 'Artikel Praktis' }];
+const CATS = () => [{ v: 'kegiatan', l: 'Kegiatan' }, { v: 'berita', l: 'Berita' }, { v: 'prestasi', l: 'Prestasi' }, { v: 'pengumuman', l: 'Pengumuman' }, ...GURU_CATS()];
+const CAT_LABEL = Object.fromEntries([{ v: 'kegiatan', l: 'Kegiatan' }, { v: 'berita', l: 'Berita' }, { v: 'prestasi', l: 'Prestasi' }, { v: 'pengumuman', l: 'Pengumuman' }, { v: 'opini', l: 'Opini' }, { v: 'tips', l: 'Tips & Tutorial' }, { v: 'artikel', l: 'Artikel Praktis' }].map((c) => [c.v, c.l]));
+const STATUS_TAG = { publish: ['ok', 'Terbit'], draft: ['draft', 'Draf'], review: ['wait', 'Menunggu persetujuan WMM'], ditolak: ['bad', 'Perlu revisi'] };
+const statusTag = (st) => { const [c, l] = STATUS_TAG[st] || ['draft', st]; return `<span class="tag ${c}">${l}</span>`; };
 const RES = {
   posts: {
-    title: 'Berita & Kegiatan', single: 'berita', icon: 'news',
+    get title() { return isGuru() ? 'Tulisan Saya' : 'Berita & Kegiatan'; }, get single() { return isGuru() ? 'tulisan' : 'berita'; }, icon: 'news',
     cols: [
       ['', (r) => (r.cover ? `<img class="thumb" src="${esc(r.cover)}" alt="">` : `<span class="thumb" style="display:block"></span>`)],
       ['Judul', (r) => `<span class="t-title">${esc(r.title)}</span><span class="t-sub">${fmtDate(r.published_at)} · ${esc(r.author_name || '')} · ${r.views || 0}× dibaca</span>`],
-      ['Unit', (r) => unitTag(r.unit_slug)],
-      ['Kategori', (r) => esc(r.category)],
-      ['Status', (r) => `<span class="tag ${r.status === 'publish' ? 'ok' : 'draft'}">${r.status === 'publish' ? 'Terbit' : 'Draf'}</span>${r.featured ? ' <span class="tag" style="--c:#f26836">Utama</span>' : ''}`],
+      ['Unit', (r) => (isGuru() ? '' : unitTag(r.unit_slug))],
+      ['Kategori', (r) => esc(CAT_LABEL[r.category] || r.category)],
+      ['Status', (r) => `${statusTag(r.status)}${r.featured ? ' <span class="tag" style="--c:#f26836">Utama</span>' : ''}${r.status === 'ditolak' && r.review_note ? `<span class="t-sub" style="max-width:260px;white-space:normal">Catatan WMM: ${esc(r.review_note)}</span>` : ''}${r.status === 'publish' && r.reviewed_by ? `<span class="t-sub">Disetujui ${esc(r.reviewed_by)}</span>` : ''}`],
     ],
     main: () => [
       { k: 'title', label: 'Judul', required: true, max: 200 },
-      { k: 'content', label: 'Isi berita', type: 'rich' },
+      { k: 'content', label: isGuru() ? 'Isi tulisan' : 'Isi berita', type: 'rich' },
       { k: 'excerpt', label: 'Ringkasan (opsional)', type: 'textarea', rows: 2, help: 'Dikosongkan = diambil otomatis dari awal isi berita.' },
     ],
-    side: () => [
+    side: () => isGuru() ? [
+      { k: 'category', label: 'Jenis tulisan', type: 'select', opts: GURU_CATS, default: 'opini' },
+      { k: 'cover', label: 'Gambar sampul (opsional)', type: 'image', help: 'Disarankan foto mendatar (landscape). Gunakan foto milik sendiri atau bebas hak cipta.' },
+    ] : [
       { k: 'status', label: 'Status', type: 'select', opts: STATUS, default: 'publish' },
       { k: 'category', label: 'Kategori', type: 'select', opts: CATS },
       ...(isAdmin() ? [{ k: 'unit_slug', label: 'Unit', type: 'select', opts: unitOptions, default: 'sekolah' }] : []),
@@ -311,8 +322,10 @@ const RES = {
 
 // ---------- Kerangka panel ----------
 function menu() {
+  if (isGuru()) return [['Menulis', [['dashboard', 'Dasbor', 'dash'], ['posts', 'Tulisan Saya', 'pen']]]];
   const u = ME.unit_slug, items = [['dashboard', 'Dasbor', 'dash'], ['posts', 'Berita & Kegiatan', 'news'], ['agenda', 'Agenda', 'cal'], ['gallery', 'Galeri', 'img'], ['prestasi', 'Prestasi Siswa', 'trophy']];
   if (isAdmin() || UNIT[u]?.type === 'waka') items.splice(1, 0, ['program', 'Program Sekolah', 'clip']);
+  if (canReview()) items.splice(1, 0, ['review', 'Persetujuan Tulisan', 'check']);
   const groups = [['Konten', items]];
   if (isAdmin()) {
     groups.push(['Unit', [['units', 'Profil Unit & Waka', 'unit'], ['dudi', 'DUDI / Mitra Industri', 'handshake'], ['lowongan', 'Lowongan (BKK)', 'job'], ['skema', 'Skema (LSP)', 'badge'], ['/sarpras', 'SI-SARPRAS (Inventaris)', 'box']]]);
@@ -333,13 +346,13 @@ function renderShell() {
   $('#app').innerHTML = `<div class="shell">
     <aside class="side" id="side">
       <div class="side-brand"><img src="/assets/img/emblem-smkn8.png" alt=""><div><b>SMKN 8 Surabaya</b><span>Panel pengelola</span></div></div>
-      <div class="side-role"><b>${esc(ME.name || ME.username)}</b><small>${isAdmin() ? 'Administrator sekolah' : `Pengelola ${esc(un?.name || ME.unit_slug)}`}</small></div>
-      <nav id="menu">${menu().map(([g, it]) => `<div class="grp">${esc(g)}</div>${it.map(([h, l, i]) => `<a href="${h.startsWith('/') ? h : '#/' + h}" data-h="${h}">${ic(i)}${esc(l)}${h === 'messages' ? '<span class="count" id="unread" hidden></span>' : ''}</a>`).join('')}`).join('')}</nav>
+      <div class="side-role"><b>${esc(ME.name || ME.username)}</b><small>${isAdmin() ? 'Administrator sekolah' : isGuru() ? 'Guru penulis' + (ME.title ? ' · ' + esc(ME.title) : '') : `Pengelola ${esc(un?.name || ME.unit_slug)}`}</small></div>
+      <nav id="menu">${menu().map(([g, it]) => `<div class="grp">${esc(g)}</div>${it.map(([h, l, i]) => `<a href="${h.startsWith('/') ? h : '#/' + h}" data-h="${h}">${ic(i)}${esc(l)}${h === 'messages' ? '<span class="count" id="unread" hidden></span>' : h === 'review' ? '<span class="count" id="pending" hidden></span>' : ''}</a>`).join('')}`).join('')}</nav>
       <div class="side-foot">
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 19</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 20</span>
       </div>
     </aside>
     <div class="main">
@@ -358,12 +371,14 @@ const V = {};
 V.dashboard = async (view) => {
   setHead('Dasbor');
   const d = await api('admin/dashboard');
+  if (d.guru) return guruDashboard(view, d);
   const un = UNIT[ME.unit_slug];
   const stats = [[d.posts, 'Berita & kegiatan', '#235ba4'], [d.agenda, 'Agenda', '#16966a'], [d.gallery, 'Foto galeri', '#7c4bc4'], [d.views, 'Total dibaca', '#f26836']];
   if (d.lowongan !== undefined) stats.push([d.lowongan, 'Lowongan dibuka', '#16966a']);
   if (d.skema !== undefined) stats.push([d.skema, 'Skema sertifikasi', '#e3262b']);
   if (d.users !== undefined) stats.push([d.users, 'Pengguna', '#24282e']);
   if (d.unread !== undefined) stats.push([d.unread, 'Pesan belum dibaca', '#d2372b']);
+  if (d.pending !== undefined) stats.unshift([d.pending, 'Tulisan guru menunggu persetujuan', '#d98a06']);
   const quick = [...(isAdmin() || UNIT[ME.unit_slug]?.type === 'waka' ? [['program/new', 'Tambah program sekolah', 'clip']] : []), ['posts/new', 'Tulis berita / kegiatan', 'news'], ['prestasi/new', 'Tambah prestasi siswa', 'trophy'], ['agenda/new', 'Tambah agenda', 'cal'], ['gallery', 'Unggah foto galeri', 'img']];
   if (!isAdmin()) quick.push([`units/${ME.unit_slug}`, 'Perbarui profil unit', 'unit']);
   if (isAdmin() || isBkk()) quick.push(['lowongan/new', 'Tambah lowongan', 'job']);
@@ -375,6 +390,7 @@ V.dashboard = async (view) => {
       <h2>Halo, ${esc(ME.name || ME.username)}</h2><p>${isAdmin() ? 'Anda dapat mengelola seluruh isi website, unit, dan pengguna.' : `Anda mengelola halaman ${esc(un?.name || '')}.`}</p></div>
       <div><a class="btn btn-primary" href="#/posts/new">${ic('plus')}Tulis berita</a>${!isAdmin() && un ? `<a class="btn btn-line" href="${unitUrl(un)}" target="_blank">${ic('ext')}Lihat halaman</a>` : ''}</div></div>
     ${isAdmin() ? backupReminder(d) : ''}
+    ${d.pending ? `<div class="notice info" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span>${ic('pen')} <b>${d.pending} tulisan guru</b> menunggu persetujuan Anda.</span><a class="btn btn-primary btn-sm" href="#/review">Periksa sekarang</a></div>` : ''}
     <div class="grid-stats">${stats.map(([v, l, c]) => `<div class="stat" style="--c:${c}"><b>${v}</b><span>${l}</span></div>`).join('')}</div>
     <div class="form-grid">
       <div class="box"><h3>Berita terbaru</h3>${d.recent.length ? `<table><tbody>${d.recent.map((r) => `<tr><td><a href="#/posts/${r.id}"><span class="t-title">${esc(r.title)}</span><span class="t-sub">${fmtDate(r.published_at)} · ${r.views}× dibaca</span></a></td><td>${unitTag(r.unit_slug)}</td><td><span class="tag ${r.status === 'publish' ? 'ok' : 'draft'}">${r.status === 'publish' ? 'Terbit' : 'Draf'}</span></td></tr>`).join('')}</tbody></table>` : '<div class="empty">Belum ada berita.</div>'}</div>
@@ -397,7 +413,7 @@ async function listView(view, key) {
     $('#tbl').innerHTML = d.items.length ? `<table><thead><tr>${R.cols.map(([h]) => `<th>${h}</th>`).join('')}<th></th></tr></thead><tbody>
       ${d.items.map((r) => `<tr>${R.cols.map(([, fn]) => `<td>${fn(r)}</td>`).join('')}<td class="act">
         ${R.view && R.view(r) ? `<a class="btn btn-line btn-sm" href="${R.view(r)}" target="_blank" title="Lihat">${ic('ext')}</a>` : ''}
-        <a class="btn btn-line btn-sm" href="#/${key}/${r.id}">Ubah</a><button class="btn btn-danger btn-sm" data-del="${r.id}">Hapus</button></td></tr>`).join('')}
+        <a class="btn btn-line btn-sm" href="#/${key}/${r.id}">${isGuru() && r.status === 'publish' ? 'Lihat' : 'Ubah'}</a>${isGuru() && r.status === 'publish' ? '' : `<button class="btn btn-danger btn-sm" data-del="${r.id}">Hapus</button>`}</td></tr>`).join('')}
       </tbody></table>` : `<div class="empty">Belum ada data. <a href="#/${key}/new" style="color:var(--blue);font-weight:700">Tambah ${R.single} pertama</a></div>`;
     $('#pg').innerHTML = d.pages > 1 ? Array.from({ length: d.pages }, (_, i) => `<button class="${i + 1 === page ? 'on' : ''}" data-p="${i + 1}">${i + 1}</button>`).join('') : '';
   };
@@ -421,24 +437,36 @@ async function editView(view, key, id) {
   setHead(`${id ? 'Ubah' : 'Tambah'} ${R.single}`, `<a class="btn btn-line" href="#/${key}">Kembali</a>`);
   const main = R.main(), side = R.side ? R.side() : [];
   const all = [...main, ...side];
-  view.innerHTML = `<form id="f" novalidate><div class="${side.length ? 'form-grid' : ''}">
+  const guruPost = key === 'posts' && isGuru();
+  if (guruPost && item.status === 'publish') {
+    view.innerHTML = `<div class="notice info">Tulisan ini sudah <b>tayang</b> di website (disetujui ${esc(item.reviewed_by || 'WMM')}). Tulisan yang sudah tayang tidak dapat diubah lagi; hubungi WMM bila perlu revisi.</div>
+      <div class="box"><h3>${esc(item.title)}</h3><div class="rich-view">${item.content || ''}</div><a class="btn btn-line" href="/berita/${esc(item.slug)}" target="_blank">${ic('ext')}Lihat di website</a></div>`;
+    return;
+  }
+  view.innerHTML = `${guruPost ? `<div class="notice ${item.status === 'ditolak' ? 'bad' : 'info'}">${item.status === 'ditolak' ? `<b>Perlu revisi.</b> Catatan dari ${esc(item.reviewed_by || 'WMM')}: ${esc(item.review_note || '-')}<br>Perbaiki tulisan lalu klik <b>Kirim ke WMM</b> lagi.`
+      : item.status === 'review' ? '<b>Sedang menunggu persetujuan WMM.</b> Anda masih boleh memperbaikinya; tulisan akan tetap dalam antrean.'
+      : 'Tulisan Anda <b>tidak langsung tayang</b>. Setelah klik <b>Kirim ke WMM</b>, tulisan diperiksa Waka Manajemen Mutu terlebih dahulu. Nama Anda akan tercantum sebagai penulis.'}</div>` : ''}<form id="f" novalidate><div class="${side.length ? 'form-grid' : ''}">
     <div class="box"><div class="fields">${main.map((f) => fieldHtml(f, item[f.k])).join('')}</div></div>
     ${side.length ? `<div class="box"><div class="fields">${side.map((f) => fieldHtml(f, item[f.k])).join('')}</div>
-      <div class="form-actions"><button class="btn btn-primary btn-block" type="submit">Simpan</button></div></div>` : ''}
+      <div class="form-actions">${guruPost ? `<button class="btn btn-line btn-block" type="submit" data-st="draft">Simpan draf</button><button class="btn btn-primary btn-block" type="submit" data-st="review">${ic('check')}Kirim ke WMM</button>` : '<button class="btn btn-primary btn-block" type="submit">Simpan</button>'}</div></div>` : ''}
   </div>${side.length ? '' : `<div class="form-actions"><a class="btn btn-line" href="#/${key}">Batal</a><button class="btn btn-primary" type="submit">Simpan</button></div>`}</form>`;
   bindForm(view, all);
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const data = readForm(view, all);
     for (const f of all) if (f.required && !data[f.k]) return toast(`"${f.label}" wajib diisi.`, true);
-    if (key === 'posts') {
+    if (guruPost) {
+      data.status = e.submitter?.dataset.st === 'draft' ? 'draft' : 'review';
+      if (data.status === 'review' && !(data.content || '').replace(/<[^>]+>/g, '').trim()) return toast('Isi tulisan masih kosong.', true);
+      delete data.published_at;
+    } else if (key === 'posts') {
       data.published_at = data.published_at && data.published_at === wibDate(original.published_at) ? original.published_at
         : data.published_at ? new Date(data.published_at + 'T' + new Date(Date.now() + 7 * 3600e3).toISOString().slice(11, 19) + '+07:00').toISOString() : '';
     }
     const btns = $$('button[type=submit]', view); btns.forEach((b) => (b.disabled = true));
     try {
       await api(`admin/${key}${id ? '/' + id : ''}`, { method: id ? 'PUT' : 'POST', body: data });
-      toast('Tersimpan'); location.hash = `#/${key}`;
+      toast(guruPost ? (data.status === 'review' ? 'Terkirim ke WMM. Anda akan melihat statusnya di "Tulisan Saya".' : 'Draf tersimpan') : 'Tersimpan'); location.hash = `#/${key}`;
     } catch (er) { toast(er.message, true); btns.forEach((b) => (b.disabled = false)); }
   };
 }
@@ -596,10 +624,11 @@ V.settings = async (view) => {
 
 // Pengguna & hak akses
 V.users = async (view) => {
-  setHead('Pengguna & Akses', `<button class="btn btn-primary" id="addU">${ic('plus')}Tambah pengguna</button>`);
-  const roleOpts = () => [{ v: 'unit', l: 'Pengelola Unit (Waka / Jurusan / Lembaga / TEFA)' }, { v: 'admin', l: 'Administrator (semua akses)' }];
+  setHead('Pengguna & Akses', `<button class="btn btn-line" id="bulkU">${ic('users')}Tambah guru sekaligus</button><button class="btn btn-primary" id="addU">${ic('plus')}Tambah pengguna</button>`);
+  const roleOpts = () => [{ v: 'unit', l: 'Pengelola Unit (Waka / Jurusan / Lembaga / TEFA)' }, { v: 'guru', l: 'Guru Penulis (opini, tips & tutorial, artikel)' }, { v: 'admin', l: 'Administrator (semua akses)' }];
   const form = (u = {}) => [
-    { k: 'name', label: 'Nama lengkap', required: true },
+    { k: 'name', label: 'Nama lengkap & gelar', required: true, help: 'Untuk guru, nama ini tampil sebagai penulis di website.' },
+    { k: 'title', label: 'Jabatan / mata pelajaran (opsional)', placeholder: 'mis. Guru Tata Boga', help: 'Tampil di bawah nama penulis.' },
     ...(u.id ? [] : [{ k: 'username', label: 'Username (untuk login)', required: true, help: 'Huruf kecil, angka, titik atau strip. Contoh: kuliner, mm.operator' }]),
     { k: 'role', label: 'Peran', type: 'select', opts: roleOpts, default: 'unit', half: true },
     { k: 'unit_slug', label: 'Unit yang dikelola', type: 'select', opts: () => UNITS.map((x) => ({ v: x.slug, l: `${x.name} (${TYPE_LABEL[x.type] || x.type})` })), half: true },
@@ -612,7 +641,7 @@ V.users = async (view) => {
     m.innerHTML = `<form class="modal-card"><h2>${u.id ? 'Ubah pengguna' : 'Pengguna baru'}</h2><div class="fields">${fs.map((f) => fieldHtml(f, u[f.k])).join('')}</div>
       <div class="form-actions"><button type="button" class="btn btn-line" data-x>Batal</button><button class="btn btn-primary">Simpan</button></div></form>`;
     document.body.appendChild(m);
-    const sync = () => { $('[data-k="unit_slug"]', m).style.display = $('[name=role]', m).value === 'admin' ? 'none' : ''; };
+    const sync = () => { $('[data-k="unit_slug"]', m).style.display = $('[name=role]', m).value === 'unit' ? '' : 'none'; };
     $('[name=role]', m).onchange = sync; sync();
     m.onclick = (e) => { if (e.target === m || e.target.closest('[data-x]')) m.remove(); };
     $('form', m).onsubmit = async (e) => {
@@ -620,18 +649,58 @@ V.users = async (view) => {
       try { await api('admin/users' + (u.id ? '/' + u.id : ''), { method: u.id ? 'PUT' : 'POST', body: d }); m.remove(); toast('Pengguna tersimpan'); load(); } catch (er) { toast(er.message, true); }
     };
   };
-  view.innerHTML = `<div class="notice info"><b>Administrator</b> dapat mengelola semua isi website. <b>Pengelola unit</b> hanya dapat mengelola berita, agenda, galeri, prestasi, dan profil unitnya sendiri. <b>Waka</b> (WMM, Kurikulum, Kesiswaan, Sarpras, Humas) juga mengelola <b>Program Sekolah</b>; pengelola BKK dan <b>Waka Humas</b> juga lowongan kerja & DUDI semua jurusan, pengelola LSP juga skema.</div><div class="table-wrap" id="tbl"></div>`;
+  view.innerHTML = `<div class="toolbar"><label class="search">${ic('search')}<input type="search" id="uq" placeholder="Cari nama atau username…"></label>
+    <select id="ur"><option value="">Semua peran</option><option value="admin">Administrator</option><option value="unit">Pengelola unit</option><option value="guru">Guru penulis</option></select></div>
+    <div class="notice info"><b>Guru penulis</b> hanya dapat menulis Opini, Tips & Tutorial, dan Artikel Praktis; tulisannya tayang setelah disetujui <b>Waka Manajemen Mutu (WMM)</b>. <b>Administrator</b> dapat mengelola semua isi website. <b>Pengelola unit</b> hanya dapat mengelola berita, agenda, galeri, prestasi, dan profil unitnya sendiri. <b>Waka</b> (WMM, Kurikulum, Kesiswaan, Sarpras, Humas) juga mengelola <b>Program Sekolah</b>; pengelola BKK dan <b>Waka Humas</b> juga lowongan kerja & DUDI semua jurusan, pengelola LSP juga skema.</div><div class="table-wrap" id="tbl"></div>`;
   let rows = [];
   const load = async () => {
     rows = (await api('admin/users')).items;
-    $('#tbl').innerHTML = `<table><thead><tr><th>Nama</th><th>Username</th><th>Akses</th><th>Login terakhir</th><th>Status</th><th></th></tr></thead><tbody>${rows.map((u) => `<tr>
-      <td><b>${esc(u.name || '-')}</b></td><td><code>${esc(u.username)}</code></td>
-      <td>${u.role === 'admin' ? '<span class="tag" style="--c:#f26836">Administrator</span>' : unitTag(u.unit_slug) + ` <span class="t-sub">${esc(unitName(u.unit_slug))}</span>`}</td>
+    draw();
+  };
+  const draw = () => {
+    const q = ($('#uq').value || '').toLowerCase(), r = $('#ur').value;
+    const list = rows.filter((u) => (!r || u.role === r) && (!q || `${u.name} ${u.username}`.toLowerCase().includes(q)));
+    $('#tbl').innerHTML = `<table><thead><tr><th>Nama</th><th>Username</th><th>Akses</th><th>Login terakhir</th><th>Status</th><th></th></tr></thead><tbody>${list.map((u) => `<tr>
+      <td><b>${esc(u.name || '-')}</b>${u.title ? `<span class="t-sub">${esc(u.title)}</span>` : ''}</td><td><code>${esc(u.username)}</code></td>
+      <td>${u.role === 'admin' ? '<span class="tag" style="--c:#f26836">Administrator</span>' : u.role === 'guru' ? '<span class="tag" style="--c:#0f766e">Guru penulis</span>' : unitTag(u.unit_slug) + ` <span class="t-sub">${esc(unitName(u.unit_slug))}</span>`}</td>
       <td>${u.last_login ? fmtDate(u.last_login) : '<span class="t-sub">Belum pernah</span>'}</td>
       <td><span class="tag ${u.active ? 'ok' : 'bad'}">${u.active ? 'Aktif' : 'Nonaktif'}</span></td>
       <td class="act"><button class="btn btn-line btn-sm" data-ed="${u.id}">Ubah</button>${u.id !== ME.id ? `<button class="btn btn-danger btn-sm" data-del="${u.id}">Hapus</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
   };
+  $('#uq').oninput = draw; $('#ur').onchange = draw;
   $('#addU').onclick = () => open();
+  $('#bulkU').onclick = () => {
+    const m = document.createElement('div'); m.className = 'modal';
+    m.innerHTML = `<div class="modal-card" style="max-width:720px"><h2>Tambah akun guru sekaligus</h2>
+      <p class="t-sub" style="white-space:normal;margin:0 0 12px">Tempel daftar guru, <b>satu guru per baris</b>. Format: <code>Nama lengkap & gelar</code> atau <code>Nama ; Jabatan/Mapel</code> atau <code>Nama ; Jabatan ; username ; password</code>. Bisa disalin langsung dari kolom Excel. Username & password dibuat otomatis bila dikosongkan.</p>
+      <label class="field"><textarea id="bl" rows="10" placeholder="Dra. Siti Aminah, M.Pd. ; Guru Tata Boga&#10;Bambang Sutejo, S.Pd. ; Guru DKV&#10;Rina Wulandari, S.Tr.Par."></textarea></label>
+      <div id="bres" style="margin-top:12px"></div>
+      <div class="form-actions"><button type="button" class="btn btn-line" data-x>Tutup</button><button class="btn btn-primary" id="bgo">Buat akun</button></div></div>`;
+    document.body.appendChild(m);
+    m.onclick = (e) => { if (e.target === m || e.target.closest('[data-x]')) m.remove(); };
+    $('#bgo', m).onclick = async () => {
+      const lines = $('#bl', m).value.split(/\r?\n/).map((l) => l.split(/\s*[;\t]\s*/).map((x) => x.trim())).filter((x) => x[0]);
+      if (!lines.length) return toast('Daftar guru masih kosong.', true);
+      $('#bgo', m).disabled = true;
+      try {
+        const r = await api('admin/users/bulk', { method: 'POST', body: { rows: lines.map(([name, title, username, password]) => ({ name, title, username, password })) } });
+        const csv = 'Nama,Jabatan,Username,Password\n' + r.created.map((c) => [c.name, c.title, c.username, c.password].map((v) => `"${String(v || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+        $('#bres', m).innerHTML = `<div class="notice ok"><b>${r.created.length} akun guru dibuat.</b>${r.skipped.length ? ` ${r.skipped.length} baris dilewati.` : ''} Simpan daftar password ini sekarang — password tidak dapat dilihat lagi setelah jendela ditutup.</div>
+          <div class="table-wrap" style="max-height:260px;overflow:auto"><table><thead><tr><th>Nama</th><th>Username</th><th>Password</th></tr></thead><tbody>${r.created.map((c) => `<tr><td>${esc(c.name)}</td><td><code>${esc(c.username)}</code></td><td><code>${esc(c.password)}</code></td></tr>`).join('')}</tbody></table></div>
+          <div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-line btn-sm" id="bcsv">${ic('dl')}Unduh daftar (CSV/Excel)</button><button class="btn btn-line btn-sm" id="bprint">Cetak kartu login</button></div>`;
+        $('#bcsv', m).onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })); a.download = 'akun-guru-smkn8.csv'; a.click(); };
+        $('#bprint', m).onclick = () => {
+          const w = window.open('', '_blank'); if (!w) return toast('Izinkan pop-up untuk mencetak.', true);
+          w.document.write(`<!doctype html><title>Akun Guru</title><style>body{font-family:Arial,sans-serif;display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}.c{border:1px dashed #555;padding:12px;border-radius:8px;font-size:13px;page-break-inside:avoid}b{font-size:14px}code{font-size:14px}</style>
+            ${r.created.map((c) => `<div class="c"><div style="color:#235ba4;font-weight:bold">Akun Penulis Website SMKN 8 Surabaya</div><b>${esc(c.name)}</b><br>Alamat: smkn8-sby.sch.id/admin<br>Username: <code>${esc(c.username)}</code><br>Password: <code>${esc(c.password)}</code><br><small>Segera ganti password setelah login pertama (menu Ganti password).</small></div>`).join('')}
+            <script>onload=()=>print()<\/script>`);
+          w.document.close();
+        };
+        load();
+      } catch (er) { toast(er.message, true); }
+      $('#bgo', m).disabled = false;
+    };
+  };
   $('#tbl').onclick = async (e) => {
     const ed = e.target.closest('[data-ed]'), del = e.target.closest('[data-del]');
     if (ed) open(rows.find((r) => r.id === +ed.dataset.ed));
@@ -639,6 +708,80 @@ V.users = async (view) => {
   };
   await load();
 };
+
+// ---------- Tulisan guru ----------
+function guruDashboard(view, d) {
+  const stats = [[d.publish, 'Tulisan tayang', '#16966a'], [d.review, 'Menunggu persetujuan', '#d98a06'], [d.ditolak, 'Perlu revisi', '#d4364b'], [d.draft, 'Draf', '#5a6474'], [d.views, 'Total dibaca', '#235ba4']];
+  view.innerHTML = `
+    <div class="welcome"><div><span class="mono" style="color:var(--sky)">Guru penulis</span>
+      <h2>Halo, ${esc(ME.name || ME.username)}</h2><p>Bagikan opini, tips & tutorial, atau artikel praktis Anda untuk website SMKN 8 Surabaya. Setiap tulisan diperiksa Waka Manajemen Mutu (WMM) sebelum tayang.</p></div>
+      <div><a class="btn btn-primary" href="#/posts/new">${ic('pen')}Tulis artikel baru</a></div></div>
+    ${d.ditolak ? `<div class="notice bad">${ic('pen')} Ada <b>${d.ditolak} tulisan</b> yang dikembalikan WMM untuk direvisi. Buka <a href="#/posts" style="font-weight:700">Tulisan Saya</a> untuk melihat catatannya.</div>` : ''}
+    <div class="grid-stats">${stats.map(([v, l, c]) => `<div class="stat" style="--c:${c}"><b>${v}</b><span>${l}</span></div>`).join('')}</div>
+    <div class="form-grid">
+      <div class="box"><h3>Tulisan terakhir</h3>${d.recent.length ? `<table><tbody>${d.recent.map((r) => `<tr><td><a href="#/posts/${r.id}"><span class="t-title">${esc(r.title)}</span><span class="t-sub">${esc(CAT_LABEL[r.category] || '')}${r.status === 'publish' ? ` · ${r.views}× dibaca` : ''}</span></a>${r.status === 'ditolak' && r.review_note ? `<span class="t-sub" style="white-space:normal">Catatan WMM: ${esc(r.review_note)}</span>` : ''}</td><td>${statusTag(r.status)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Belum ada tulisan. Ayo mulai menulis!</div>'}</div>
+      <div class="box"><h3>Alur tulisan</h3><ol style="margin:0;padding-left:18px;line-height:1.8;font-size:.9rem">
+        <li>Klik <b>Tulis artikel baru</b>, pilih jenis: <b>Opini</b>, <b>Tips & Tutorial</b>, atau <b>Artikel Praktis</b>.</li>
+        <li>Tulis isi, tambahkan gambar bila perlu, lalu <b>Simpan draf</b> atau langsung <b>Kirim ke WMM</b>.</li>
+        <li>WMM memeriksa: <b>disetujui</b> → tayang di website dengan nama Anda sebagai penulis; atau <b>dikembalikan</b> dengan catatan revisi.</li>
+        <li>Tulisan yang dikembalikan bisa diperbaiki lalu dikirim lagi.</li></ol></div>
+    </div>`;
+}
+
+V.review = async (view, id) => {
+  if (id) return reviewDetail(view, id);
+  setHead('Persetujuan Tulisan Guru');
+  const TABS = [['review', 'Menunggu'], ['ditolak', 'Dikembalikan'], ['publish', 'Sudah tayang']];
+  let tab = sessionStorage.getItem('rvTab') || 'review';
+  const load = async () => {
+    const d = await api('admin/review?status=' + tab);
+    view.innerHTML = `<div class="notice info">Tulisan dari akun <b>Guru Penulis</b> (Opini, Tips & Tutorial, Artikel Praktis) tidak tayang sebelum disetujui di sini. Anda dapat memperbaiki salah ketik sebelum menyetujui, atau mengembalikannya dengan catatan revisi.</div>
+      <div class="toolbar">${TABS.map(([v, l]) => `<button class="btn ${v === tab ? 'btn-dark' : 'btn-line'} btn-sm" data-tab="${v}">${l} (${d.counts[v] || 0})</button>`).join('')}</div>
+      <div class="table-wrap">${d.items.length ? `<table><thead><tr><th>Tulisan</th><th>Penulis</th><th>Jenis</th><th>${tab === 'publish' ? 'Tayang' : 'Dikirim'}</th><th></th></tr></thead><tbody>${d.items.map((r) => `<tr>
+        <td><span class="t-title">${esc(r.title)}</span><span class="t-sub" style="white-space:normal;max-width:420px">${esc((r.excerpt || '').slice(0, 140))}${tab === 'ditolak' && r.review_note ? `<br><b>Catatan:</b> ${esc(r.review_note)}` : ''}</span></td>
+        <td><b>${esc(r.author_name || "-")}</b>${r.author_title ? `<span class="t-sub" style="display:block">${esc(r.author_title)}</span>` : ''}</td>
+        <td>${esc(CAT_LABEL[r.category] || r.category)}</td>
+        <td>${fmtDate(tab === 'publish' ? r.published_at : r.submitted_at)}${r.reviewed_by && tab !== 'review' ? `<span class="t-sub">oleh ${esc(r.reviewed_by)}</span>` : ''}</td>
+        <td class="act">${tab === 'publish' ? `<a class="btn btn-line btn-sm" href="/berita/${esc(r.slug)}" target="_blank">${ic('ext')}</a>` : ''}<a class="btn ${tab === 'review' ? 'btn-primary' : 'btn-line'} btn-sm" href="#/review/${r.id}">${tab === 'review' ? 'Periksa' : 'Buka'}</a></td></tr>`).join('')}</tbody></table>`
+        : `<div class="empty">${tab === 'review' ? 'Tidak ada tulisan yang menunggu. 👍' : 'Belum ada data.'}</div>`}</div>`;
+    $$('[data-tab]', view).forEach((b) => b.onclick = () => { tab = b.dataset.tab; sessionStorage.setItem('rvTab', tab); load(); });
+  };
+  await load();
+};
+async function reviewDetail(view, id) {
+  const { item } = await api('admin/review/' + id);
+  setHead('Periksa tulisan', `<a class="btn btn-line" href="#/review">Kembali</a>`);
+  const fields = [
+    { k: 'title', label: 'Judul', required: true },
+    { k: 'content', label: 'Isi tulisan (boleh diperbaiki sebelum disetujui)', type: 'rich' },
+  ];
+  const side = [{ k: 'category', label: 'Jenis tulisan', type: 'select', opts: GURU_CATS }, { k: 'cover', label: 'Gambar sampul', type: 'image' }];
+  view.innerHTML = `<div class="form-grid"><div class="box"><div class="fields">${fields.map((f) => fieldHtml(f, item[f.k])).join('')}</div></div>
+    <div><div class="box"><h3>Penulis</h3><p style="margin:0"><b>${esc(item.author_name || '-')}</b>${item.author_title ? `<br><span class="t-sub" style="display:inline">${esc(item.author_title)}</span>` : ''}</p>
+      <p class="t-sub" style="margin:8px 0 0">Dikirim ${fmtDate(item.submitted_at || item.updated_at)} · Status: ${statusTag(item.status)}</p>
+      ${item.review_note ? `<p class="t-sub" style="white-space:normal;margin-top:8px">Catatan terakhir: ${esc(item.review_note)}</p>` : ''}</div>
+    <div class="box"><div class="fields">${side.map((f) => fieldHtml(f, item[f.k])).join('')}
+      <label class="field" data-k="note"><span>Catatan untuk penulis</span><textarea id="rvNote" rows="4" placeholder="Wajib diisi bila dikembalikan. Opsional bila disetujui (mis. ucapan terima kasih).">${esc(item.status === 'ditolak' ? item.review_note || '' : '')}</textarea></label></div>
+      <div class="form-actions" style="flex-direction:column;align-items:stretch">
+        <button class="btn btn-primary btn-block" data-act="approve">${ic('check')}${item.status === 'publish' ? 'Simpan perubahan (tetap tayang)' : 'Setujui & tayangkan'}</button>
+        <button class="btn btn-danger btn-block" data-act="reject">${item.status === 'publish' ? 'Tarik dari website & kembalikan' : 'Kembalikan untuk revisi'}</button>
+        <button class="btn btn-line btn-block" data-act="save">Simpan perbaikan saja</button></div></div></div></div>`;
+  const all = [...fields, ...side];
+  bindForm(view, all);
+  view.querySelectorAll('[data-act]').forEach((b) => b.onclick = async () => {
+    const act = b.dataset.act, note = $('#rvNote').value.trim();
+    if (act === 'reject' && !note) return toast('Tuliskan catatan revisi untuk penulis.', true);
+    if (act === 'approve' && item.status !== 'publish' && !confirm('Setujui dan tayangkan tulisan ini di website?')) return;
+    if (act === 'reject' && item.status === 'publish' && !confirm('Tarik tulisan ini dari website?')) return;
+    const data = readForm(view, all);
+    view.querySelectorAll('[data-act]').forEach((x) => (x.disabled = true));
+    try {
+      await api('admin/review/' + id, { method: 'POST', body: { ...data, note, action: act } });
+      toast(act === 'approve' ? 'Tulisan disetujui dan tayang di website.' : act === 'reject' ? 'Tulisan dikembalikan ke penulis.' : 'Perbaikan tersimpan.');
+      refreshUnread(); location.hash = '#/review';
+    } catch (er) { toast(er.message, true); view.querySelectorAll('[data-act]').forEach((x) => (x.disabled = false)); }
+  });
+}
 
 // Pesan masuk
 V.messages = async (view) => {
@@ -823,6 +966,8 @@ async function route() {
   window.scrollTo(0, 0);
   try {
     if (!a || a === 'dashboard') return await V.dashboard(view);
+    if (isGuru() && a !== 'posts' && a !== 'account') throw new Error('Akun guru hanya dapat menulis di menu "Tulisan Saya".');
+    if (a === 'review') { if (!canReview()) throw new Error('Menu ini khusus WMM dan admin.'); return await V.review(view, b); }
     if (a === 'messages' && !isAdmin() && !isBkk()) throw new Error('Menu ini khusus admin, BKK, dan Waka Humas.');
     if (RES[a]) {
       if (a === 'program' && !isAdmin() && UNIT[ME.unit_slug]?.type !== 'waka') throw new Error('Menu ini khusus admin dan wakil kepala sekolah.');
@@ -837,8 +982,11 @@ async function route() {
   } catch (e) { setHead('Oops'); view.innerHTML = `<div class="notice bad">${esc(e.message)}</div>`; }
 }
 async function refreshUnread() {
-  if (!isAdmin() && !isBkk()) return;
-  try { const d = await api('admin/dashboard'); const el = $('#unread'); if (el) { el.textContent = d.unread; el.hidden = !d.unread; } } catch { /* abaikan */ }
+  if (!isAdmin() && !isBkk() && !canReview()) return;
+  try {
+    const d = await api('admin/dashboard');
+    for (const [id, n] of [['unread', d.unread], ['pending', d.pending]]) { const el = $('#' + id); if (el) { el.textContent = n || ''; el.hidden = !n; } }
+  } catch { /* abaikan */ }
 }
 async function loadUnits() {
   const s = await fetch('/api/site').then((r) => r.json());

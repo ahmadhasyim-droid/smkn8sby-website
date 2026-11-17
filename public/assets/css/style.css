@@ -682,3 +682,13 @@ select.chip-btn { appearance: auto; padding-right: 10px; }
   .stat { padding-right: 12px; }
 }
 .sarpras-band { margin: 0 0 32px; }
+/* Tulisan guru */
+.byline { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: .84rem; color: var(--muted); }
+.byline b { color: var(--ink, #0d1a2e); }
+.av-i { width: 28px; height: 28px; border-radius: 50%; background: #0f766e; color: #fff; display: inline-grid; place-items: center; font-weight: 800; font-size: .72rem; flex-shrink: 0; font-family: var(--display, inherit); }
+.av-i.lg { width: 54px; height: 54px; font-size: 1.05rem; }
+.author-box { display: flex; gap: 16px; align-items: center; margin-top: 34px; padding: 18px 20px; border: 1px solid var(--line, #d9dee6); border-left: 4px solid #0f766e; border-radius: 10px; background: #f6fbfa; }
+.author-box b { display: block; font-size: 1.05rem; margin: 2px 0; }
+.author-box span:not(.av-i):not(.mono) { color: var(--muted); font-size: .9rem; }
+.t-note { color: var(--muted); font-size: .82rem; margin: 10px 0 0; }
+.side-card .head-card .av-i { color: #fff; opacity: 1; }

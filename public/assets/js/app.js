@@ -65,7 +65,9 @@ const fmtDate = (iso, o = { day: 'numeric', month: 'long', year: 'numeric' }) =>
   if (!iso) return ''; const d = new Date(iso.length === 10 ? iso + 'T00:00:00+07:00' : iso);
   return isNaN(d) ? '' : d.toLocaleDateString('id-ID', { timeZone: TZ, ...o });
 };
-const CATS = { berita: 'Berita', kegiatan: 'Kegiatan', prestasi: 'Prestasi', pengumuman: 'Pengumuman' };
+const CATS = { berita: 'Berita', kegiatan: 'Kegiatan', prestasi: 'Prestasi', pengumuman: 'Pengumuman', opini: 'Opini', tips: 'Tips & Tutorial', artikel: 'Artikel Praktis' };
+const GURU_CATS = ['opini', 'tips', 'artikel']; // tulisan guru (disetujui WMM)
+const nameInitials = (n) => String(n || '?').replace(/,.*$/, '').replace(/\b[A-Za-z]{1,4}\.\s*/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
 const safeUrl = (u) => (/^(https?:|mailto:|tel:|\/|#)/i.test(String(u || '').trim()) ? String(u).trim() : '#');
 const params = new URLSearchParams(location.search);
 
@@ -118,6 +120,7 @@ const postCard = (p, feature = false) => `
       <div class="meta"><span>${icon('calendar')}${fmtDate(p.published_at)}</span><span>${esc(CATS[p.category] || 'Berita')}</span></div>
       <h3>${esc(p.title)}</h3>
       ${p.excerpt ? `<p class="excerpt">${esc(p.excerpt)}</p>` : ''}
+      ${GURU_CATS.includes(p.category) && p.author_name ? `<div class="byline"><span class="av-i">${esc(nameInitials(p.author_name))}</span><span>Oleh <b>${esc(p.author_name)}</b></span></div>` : ''}
     </div>
   </a>`;
 
@@ -195,6 +198,7 @@ function renderShell() {
       <a href="/perpustakaan"${act('perpustakaan')}>Perpustakaan</a>
       <div class="dd"><button aria-haspopup="true"${['berita', 'artikel', 'agenda', 'galeri', 'prestasi'].includes(page) ? ' class="active"' : ''}>Informasi ${icon('chev')}</button><div class="dd-panel">
         ${ddLink('/berita', 'Berita & Kegiatan', 'Kabar terbaru sekolah & unit', 'news', '#235ba4')}
+        ${ddLink('/berita?kategori=tulisan-guru', 'Opini & Artikel Guru', 'Opini, tips & tutorial, artikel praktis', 'user', '#0f766e')}
         ${ddLink('/prestasi', 'Prestasi Siswa', 'Juara lomba tingkat kota hingga dunia', 'trophy', '#c08a1e')}
         ${ddLink('/agenda', 'Agenda', 'Jadwal kegiatan', 'calendar', '#16966a')}
         ${ddLink('/galeri', 'Galeri', 'Foto & video kegiatan', 'image', '#d6457e')}
@@ -663,7 +667,7 @@ PAGES.berita = async (main) => {
     history.replaceState(null, '', '/berita' + (p.toString() ? '?' + p : ''));
   };
   $('#fUnit').innerHTML = unitSelect(unit);
-  $('#fCat').innerHTML = [['', 'Semua kategori'], ...Object.entries(CATS)].map(([v, l]) => `<button class="chip-btn${v === cat ? ' on' : ''}" data-v="${v}">${esc(l)}</button>`).join('') +
+  $('#fCat').innerHTML = [['', 'Semua kategori'], ['tulisan-guru', 'Tulisan Guru'], ...Object.entries(CATS)].map(([v, l]) => `<button class="chip-btn${v === cat ? ' on' : ''}" data-v="${v}">${esc(l)}</button>`).join('') +
     `<label class="search">${icon('search')}<input id="q" type="search" placeholder="Cari berita…" value="${esc(q)}" aria-label="Cari berita"></label>`;
   const load = async () => {
     sync(); $('#list').innerHTML = '<div class="skel" style="height:300px"></div>'.repeat(3);
@@ -683,6 +687,7 @@ PAGES.artikel = async (main) => {
   const slug = params.get('s') || location.pathname.split('/').filter(Boolean).pop();
   let d; try { d = await api('posts/' + encodeURIComponent(slug)); } catch { return notFound(main); }
   const p = d.post, u = unitOf(p.unit_slug);
+  const isGuru = GURU_CATS.includes(p.category) && p.author_name;
   setTitle(p.title);
   document.body.style.setProperty('--unit', u.color);
   const url = location.origin + '/berita/' + p.slug;
@@ -693,21 +698,25 @@ PAGES.artikel = async (main) => {
     <div class="meta" style="color:#c3cfe0;margin-bottom:16px">${unitBadge(p.unit_slug)}<span>${esc(CATS[p.category] || '')}</span></div>
     <h1 style="font-size:clamp(1.9rem,4.4vw,3.4rem);max-width:980px">${esc(p.title)}</h1>
     <div class="meta" style="color:#c3cfe0;margin-top:18px"><span>${icon('calendar')}${fmtDate(p.published_at, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-      ${p.author_name ? `<span>${icon('user')}${esc(p.author_name)}</span>` : ''}<span>${icon('eye')}${(p.views || 0) + 1}× dibaca</span></div>
+      ${p.author_name ? `<span>${icon('user')}${isGuru ? 'Ditulis oleh ' : ''}${esc(p.author_name)}</span>` : ''}<span>${icon('eye')}${(p.views || 0) + 1}× dibaca</span></div>
   </div><div class="bar"></div></section>
   <section class="section" style="padding-top:40px"><div class="wrap article-wrap">
     <article>
       ${p.cover ? `<div class="article-cover"><img src="${esc(p.cover)}" alt=""></div>` : ''}
       <div class="article-body">${sanitize(p.content)}</div>
+      ${isGuru ? `<div class="author-box"><span class="av-i lg">${esc(nameInitials(p.author_name))}</span><div><span class="mono" style="color:var(--muted)">Tentang penulis</span><b>${esc(p.author_name)}</b><span>${esc(p.author_title || 'Guru SMK Negeri 8 Surabaya')}</span></div></div>
+        <p class="t-note">Tulisan ini merupakan karya guru SMK Negeri 8 Surabaya dan telah melalui pemeriksaan Waka Manajemen Mutu sebelum dipublikasikan.</p>` : ''}
       <div class="share"><span class="mono" style="color:var(--muted)">Bagikan</span>
         <a href="https://wa.me/?text=${encodeURIComponent(p.title + ' ' + url)}" target="_blank" rel="noopener">${icon('wa')}WhatsApp</a>
         <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}" target="_blank" rel="noopener">${icon('facebook')}Facebook</a>
         <button id="copy">${icon('link')}Salin tautan</button></div>
     </article>
     <aside>
-      <div class="side-card" style="--c:${u.color}"><h4>Dipublikasikan oleh</h4>
-        <a class="head-card" href="${unitUrl(u)}"><span class="av" style="background:${u.color}">${u.logo ? `<img src="${esc(u.logo)}" alt="" style="object-fit:contain;background:#fff">` : icon(u.icon || u.slug)}</span><span><b>${esc(u.name)}</b><span>Lihat halaman unit →</span></span></a></div>
-      <div class="side-card related"><h4>Berita terkait</h4>${d.related.length ? d.related.map((r) => `<a href="/berita/${encodeURIComponent(r.slug)}"><span class="rt">${cover(r)}</span><span><b>${esc(r.title)}</b><small>${fmtDate(r.published_at)}</small></span></a>`).join('') : '<p style="color:var(--muted);font-size:.9rem;margin:0">Belum ada berita terkait.</p>'}</div>
+      ${isGuru ? `<div class="side-card" style="--c:#0f766e"><h4>Penulis</h4>
+        <div class="head-card"><span class="av-i lg">${esc(nameInitials(p.author_name))}</span><span><b>${esc(p.author_name)}</b><span>${esc(p.author_title || 'Guru SMK Negeri 8 Surabaya')}</span></span></div>
+        <a href="/berita?kategori=tulisan-guru" style="display:block;margin-top:10px;font-size:.88rem;font-weight:700;color:var(--blue)">Tulisan guru lainnya →</a></div>` : `<div class="side-card" style="--c:${u.color}"><h4>Dipublikasikan oleh</h4>
+        <a class="head-card" href="${unitUrl(u)}"><span class="av" style="background:${u.color}">${u.logo ? `<img src="${esc(u.logo)}" alt="" style="object-fit:contain;background:#fff">` : icon(u.icon || u.slug)}</span><span><b>${esc(u.name)}</b><span>Lihat halaman unit →</span></span></a></div>`}
+      <div class="side-card related"><h4>${isGuru ? 'Tulisan terkait' : 'Berita terkait'}</h4>${d.related.length ? d.related.map((r) => `<a href="/berita/${encodeURIComponent(r.slug)}"><span class="rt">${cover(r)}</span><span><b>${esc(r.title)}</b><small>${fmtDate(r.published_at)}</small></span></a>`).join('') : '<p style="color:var(--muted);font-size:.9rem;margin:0">Belum ada berita terkait.</p>'}</div>
     </aside>
   </div></section>`;
   $('#copy').onclick = async (e) => { try { await navigator.clipboard.writeText(url); e.currentTarget.lastChild.textContent = 'Tersalin!'; } catch { /* abaikan */ } };

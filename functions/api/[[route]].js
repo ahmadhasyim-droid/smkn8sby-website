@@ -12,7 +12,12 @@ const JURUSAN = new Set(DEFAULT_UNITS.filter((u) => u.type === 'jurusan').map((u
 
 const SESSION_DAYS = 7;
 const MAX_MEDIA_BYTES = 1_900_000;
-const ROLES = ['admin', 'unit'];
+const ROLES = ['admin', 'unit', 'guru'];
+// Tulisan guru: hanya kategori ini, wajib disetujui WMM sebelum tayang
+const GURU_CATS = ['opini', 'tips', 'artikel'];
+const POST_CATS = ['berita', 'kegiatan', 'prestasi', 'pengumuman', ...GURU_CATS];
+const isGuru = (user) => user.role === 'guru';
+const canReview = (user) => user.role === 'admin' || user.unit_slug === 'waka-wmm';
 const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded', 'prestasi_seeded', 'sarpras_seeded', 'backup_interval', 'notif_email', 'notif_from', 'notif_last'];
 const FEED_TTL = 60 * 60 * 1000; // feed YouTube/Instagram diperbarui tiap 1 jam
 
@@ -583,7 +588,7 @@ function sessionCookie(token, maxAge, req) {
 async function currentUser(db, req) {
   const token = getCookie(req, 'sid');
   if (!token) return null;
-  const row = await db.prepare(`SELECT u.id,u.username,u.name,u.role,u.unit_slug,u.active,s.expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=?`)
+  const row = await db.prepare(`SELECT u.id,u.username,u.name,u.title,u.role,u.unit_slug,u.active,s.expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=?`)
     .bind(await sha256(token)).first();
   if (!row || !row.active || row.expires_at < Date.now()) return null;
   return row;
@@ -598,7 +603,7 @@ async function createSession(db, userId, req) {
   ]);
   return sessionCookie(token, SESSION_DAYS * 86400, req);
 }
-const publicUser = (u) => u && ({ id: u.id, username: u.username, name: u.name, role: u.role, unit_slug: u.unit_slug });
+const publicUser = (u) => u && ({ id: u.id, username: u.username, name: u.name, title: u.title || '', role: u.role, unit_slug: u.unit_slug });
 
 // ---------------- izin akses ----------------
 // admin  : semua data
@@ -654,6 +659,7 @@ const dudiAll = (user) => user.role === 'admin' || isBkk(user);
 const scopeOk = (user, scope) => (scope === 'bkk' ? isBkk(user) : user.unit_slug === scope);
 function canUseResource(user, res) {
   if (user.role === 'admin') return true;
+  if (isGuru(user)) return res.table === 'posts'; // guru hanya menulis artikel
   if (res.table === 'programs') return String(user.unit_slug || '').startsWith('waka-'); // Program Sekolah: khusus Waka
   if (res.scope === 'unit') return !!user.unit_slug;
   if (res.scope === 'major') return dudiAll(user) || JURUSAN.has(user.unit_slug);
@@ -661,6 +667,7 @@ function canUseResource(user, res) {
 }
 function canTouchRow(user, res, row) {
   if (user.role === 'admin') return true;
+  if (isGuru(user)) return res.table === 'posts' && row.author_id === user.id;
   if (res.scope === 'unit') return row.unit_slug === user.unit_slug;
   if (res.scope === 'major') return dudiAll(user) || row.major === user.unit_slug;
   return scopeOk(user, res.scope);
@@ -753,19 +760,22 @@ export async function onRequest(ctx) {
         const post = await db.prepare(`SELECT * FROM posts WHERE slug=? AND status='publish'`).bind(parts[1]).first();
         if (!post) return err('Berita tidak ditemukan', 404);
         ctx.waitUntil(db.prepare(`UPDATE posts SET views=views+1 WHERE id=?`).bind(post.id).run());
+        const guruPost = GURU_CATS.includes(post.category);
         const related = await db.prepare(`SELECT slug,title,cover,category,unit_slug,published_at FROM posts
-          WHERE status='publish' AND id<>? AND unit_slug=? ORDER BY published_at DESC LIMIT 3`).bind(post.id, post.unit_slug).all();
+          WHERE status='publish' AND id<>? AND ${guruPost ? `category IN ('opini','tips','artikel')` : 'unit_slug=?'} ORDER BY published_at DESC LIMIT 3`).bind(...(guruPost ? [post.id] : [post.id, post.unit_slug])).all();
+        delete post.review_note; delete post.reviewed_by; delete post.reviewed_at; delete post.submitted_at;
         return json({ post, related: related.results });
       }
       const where = [`status='publish'`]; const args = [];
       if (q.get('unit')) { where.push('unit_slug=?'); args.push(q.get('unit')); }
-      if (q.get('category')) { where.push('category=?'); args.push(q.get('category')); }
+      if (q.get('category') === 'tulisan-guru') where.push(`category IN ('opini','tips','artikel')`);
+      else if (q.get('category')) { where.push('category=?'); args.push(q.get('category')); }
       if (q.get('featured')) where.push('featured=1');
       if (q.get('q')) { where.push('(title LIKE ? OR excerpt LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
       const limit = clampInt(q.get('limit'), 9, 1, 50), page = clampInt(q.get('page'), 1, 1, 9999);
       const w = where.join(' AND ');
       const [rows, total] = await Promise.all([
-        db.prepare(`SELECT id,slug,title,excerpt,cover,category,unit_slug,featured,views,author_name,published_at FROM posts WHERE ${w}
+        db.prepare(`SELECT id,slug,title,excerpt,cover,category,unit_slug,featured,views,author_name,author_title,published_at FROM posts WHERE ${w}
           ORDER BY published_at DESC LIMIT ? OFFSET ?`).bind(...args, limit, (page - 1) * limit).all(),
         db.prepare(`SELECT COUNT(*) n FROM posts WHERE ${w}`).bind(...args).first(),
       ]);
@@ -937,6 +947,12 @@ export async function onRequest(ctx) {
 
     // Dashboard ringkas
     if (area === 'dashboard' && method === 'GET') {
+      if (isGuru(user)) {
+        const rows = (await db.prepare(`SELECT status, COUNT(*) n, COALESCE(SUM(views),0) v FROM posts WHERE author_id=? GROUP BY status`).bind(user.id).all()).results;
+        const by = Object.fromEntries(rows.map((r) => [r.status, r.n]));
+        const recent = await db.prepare(`SELECT id,slug,title,category,status,review_note,submitted_at,published_at,views FROM posts WHERE author_id=? ORDER BY COALESCE(updated_at,created_at) DESC LIMIT 6`).bind(user.id).all();
+        return json({ guru: true, draft: by.draft || 0, review: by.review || 0, ditolak: by.ditolak || 0, publish: by.publish || 0, views: rows.reduce((a, r) => a + r.v, 0), recent: recent.results });
+      }
       const scope = isAdmin ? '' : ' WHERE unit_slug=?';
       const a = isAdmin ? [] : [user.unit_slug];
       const one = (sql) => db.prepare(sql).bind(...a).first().then((r) => r.n);
@@ -951,6 +967,7 @@ export async function onRequest(ctx) {
         extra.backup_last = (await db.prepare(`SELECT created_at FROM backup_log WHERE kind='unduh' ORDER BY id DESC LIMIT 1`).first('created_at')) || null;
         extra.backup_interval = clampInt(await db.prepare(`SELECT value FROM settings WHERE key='backup_interval'`).first('value'), 7, 1, 90);
       }
+      if (canReview(user)) extra.pending = (await db.prepare(`SELECT COUNT(*) n FROM posts WHERE status='review' AND author_id IN (SELECT id FROM users WHERE role='guru')`).first()).n;
       if (canMessages(user)) extra.unread = (await db.prepare(`SELECT COUNT(*) n FROM messages WHERE is_read=0`).first()).n;
       if (isAdmin || isBkk(user)) extra.lowongan = (await db.prepare(`SELECT COUNT(*) n FROM lowongan WHERE status='buka'`).first()).n;
       if (isAdmin || user.unit_slug === 'lsp') extra.skema = (await db.prepare(`SELECT COUNT(*) n FROM skema`).first()).n;
@@ -1019,25 +1036,49 @@ export async function onRequest(ctx) {
       if (!isAdmin) return err('Khusus admin.', 403);
       const id = parts[2] ? clampInt(parts[2], 0, 0, 1e12) : null;
       if (method === 'GET') {
-        const rows = await db.prepare(`SELECT id,username,name,role,unit_slug,active,created_at,last_login FROM users ORDER BY role, unit_slug, username`).all();
+        const rows = await db.prepare(`SELECT id,username,name,title,role,unit_slug,active,created_at,last_login FROM users ORDER BY role, unit_slug, name, username`).all();
         return json({ items: rows.results });
       }
       const b = await body();
+      // Tambah banyak akun guru sekaligus
+      if (parts[2] === 'bulk' && method === 'POST') {
+        const rows = (Array.isArray(b.rows) ? b.rows : []).slice(0, 300);
+        const taken = new Set((await db.prepare(`SELECT username FROM users`).all()).results.map((r) => r.username));
+        const created = [], skipped = [];
+        const words = 'abcdefghjkmnpqrstuvwxyz', digits = '23456789';
+        const genPass = () => { const r = crypto.getRandomValues(new Uint8Array(8)); return Array.from(r, (x, i) => (i < 5 ? words[x % words.length] : digits[x % digits.length])).join(''); };
+        for (const r of rows) {
+          const name = str(r.name, 100); if (!name) continue;
+          let username = str(r.username, 40).toLowerCase();
+          if (!username) {
+            const parts2 = name.toLowerCase().replace(/,.*$/, '').replace(/\b[a-z]{1,4}\.\s*/g, ' ').replace(/[^a-z\s]/g, ' ').split(/\s+/).filter((w) => w.length > 1);
+            username = (parts2.slice(0, 2).join('.') || 'guru').slice(0, 30);
+          }
+          if (!/^[a-z0-9._-]{3,40}$/.test(username)) { skipped.push({ name, reason: 'username tidak valid' }); continue; }
+          let u = username, n = 1; while (taken.has(u)) u = `${username}${++n}`;
+          const password = String(r.password || '').length >= 8 ? String(r.password) : genPass();
+          await db.prepare(`INSERT INTO users(username,name,title,password,role,unit_slug,active,created_at) VALUES(?,?,?,?,'guru',NULL,1,?)`)
+            .bind(u, name, str(r.title, 100) || null, await hashPassword(password), now()).run();
+          taken.add(u); created.push({ name, username: u, password, title: str(r.title, 100) });
+        }
+        return json({ ok: true, created, skipped });
+      }
       const role = ROLES.includes(b.role) ? b.role : 'unit';
-      const unit = role === 'admin' ? null : str(b.unit_slug, 40);
+      const unit = role === 'unit' ? str(b.unit_slug, 40) : null;
       if (role === 'unit' && !(await db.prepare(`SELECT slug FROM units WHERE slug=?`).bind(unit).first())) return err('Pilih unit (jurusan/lembaga) untuk pengguna ini.');
       if (method === 'POST') {
         const username = str(b.username, 40).toLowerCase();
         if (!/^[a-z0-9._-]{3,40}$/.test(username)) return err('Username 3–40 karakter: huruf kecil, angka, titik, strip.');
         if (String(b.password || '').length < 8) return err('Password minimal 8 karakter.');
         if (await db.prepare(`SELECT id FROM users WHERE username=?`).bind(username).first()) return err('Username sudah dipakai.');
-        await db.prepare(`INSERT INTO users(username,name,password,role,unit_slug,active,created_at) VALUES(?,?,?,?,?,1,?)`)
-          .bind(username, str(b.name, 100), await hashPassword(String(b.password)), role, unit, now()).run();
+        await db.prepare(`INSERT INTO users(username,name,title,password,role,unit_slug,active,created_at) VALUES(?,?,?,?,?,?,1,?)`)
+          .bind(username, str(b.name, 100), str(b.title, 100) || null, await hashPassword(String(b.password)), role, unit, now()).run();
         return json({ ok: true });
       }
       if (method === 'PUT' && id) {
         if (id === user.id && (role !== 'admin' || !b.active)) return err('Anda tidak dapat menurunkan atau menonaktifkan akun Anda sendiri.');
-        await db.prepare(`UPDATE users SET name=?, role=?, unit_slug=?, active=? WHERE id=?`).bind(str(b.name, 100), role, unit, b.active ? 1 : 0, id).run();
+        await db.prepare(`UPDATE users SET name=?, title=?, role=?, unit_slug=?, active=? WHERE id=?`).bind(str(b.name, 100), str(b.title, 100) || null, role, unit, b.active ? 1 : 0, id).run();
+        if (role === 'guru') await db.prepare(`UPDATE posts SET author_name=?, author_title=? WHERE author_id=?`).bind(str(b.name, 100), str(b.title, 100) || null, id).run();
         if (b.password) {
           if (String(b.password).length < 8) return err('Password minimal 8 karakter.');
           await db.batch([
@@ -1052,6 +1093,41 @@ export async function onRequest(ctx) {
         if (id === user.id) return err('Anda tidak dapat menghapus akun sendiri.');
         await db.batch([db.prepare(`DELETE FROM sessions WHERE user_id=?`).bind(id), db.prepare(`DELETE FROM users WHERE id=?`).bind(id)]);
         return json({ ok: true });
+      }
+    }
+
+    // Persetujuan tulisan guru (WMM & admin)
+    if (area === 'review') {
+      if (!canReview(user)) return err('Menu ini khusus WMM dan admin.', 403);
+      const id = parts[2] ? clampInt(parts[2], 0, 0, 1e12) : null;
+      const guruOnly = `author_id IN (SELECT id FROM users WHERE role='guru')`;
+      if (method === 'GET' && !id) {
+        const st = ['review', 'draft', 'publish'].includes(q.get('status')) ? q.get('status') : q.get('status') === 'ditolak' ? 'ditolak' : 'review';
+        const rows = await db.prepare(`SELECT id,slug,title,excerpt,cover,category,status,author_name,author_title,submitted_at,review_note,reviewed_by,reviewed_at,published_at,views FROM posts
+          WHERE ${guruOnly} AND status=? ORDER BY ${st === 'publish' ? 'published_at' : 'COALESCE(submitted_at,updated_at)'} ${st === 'review' ? 'ASC' : 'DESC'} LIMIT 200`).bind(st).all();
+        const counts = Object.fromEntries((await db.prepare(`SELECT status, COUNT(*) n FROM posts WHERE ${guruOnly} GROUP BY status`).all()).results.map((r) => [r.status, r.n]));
+        return json({ items: rows.results, counts });
+      }
+      const post = id ? await db.prepare(`SELECT * FROM posts WHERE id=? AND ${guruOnly}`).bind(id).first() : null;
+      if (!post) return err('Tulisan tidak ditemukan.', 404);
+      if (method === 'GET') return json({ item: post });
+      if (method === 'POST') {
+        const b = await body();
+        const note = str(b.note, 1000);
+        const edits = {};
+        if (b.title !== undefined) { edits.title = str(b.title, 200); if (!edits.title) return err('Judul tidak boleh kosong.'); }
+        if (b.content !== undefined) { edits.content = cleanHtml(String(b.content || "")); edits.excerpt = textOnly(edits.content).slice(0, 220); }
+        if (b.category !== undefined && GURU_CATS.includes(b.category)) edits.category = b.category;
+        if (b.cover !== undefined) edits.cover = str(b.cover, 300);
+        const who = user.name || user.username;
+        if (b.action === 'approve') Object.assign(edits, { status: 'publish', published_at: post.published_at || now(), reviewed_by: who, reviewed_at: now(), review_note: note || null });
+        else if (b.action === 'reject') { if (!note) return err('Tuliskan catatan revisi untuk penulis.'); Object.assign(edits, { status: 'ditolak', reviewed_by: who, reviewed_at: now(), review_note: note }); }
+        else if (b.action !== 'save') return err('Aksi tidak dikenal.');
+        if (b.action === 'approve' && post.status !== 'publish') edits.published_at = now();
+        edits.updated_at = now();
+        const k = Object.keys(edits);
+        await db.prepare(`UPDATE posts SET ${k.map((x) => x + '=?').join(',')} WHERE id=?`).bind(...k.map((x) => edits[x]), id).run();
+        return json({ ok: true, slug: post.slug });
       }
     }
 
@@ -1075,7 +1151,8 @@ export async function onRequest(ctx) {
 
       if (method === 'GET' && !id) {
         const where = ['1=1'], args = [];
-        if (!isAdmin && res.scope === 'unit') { where.push('unit_slug=?'); args.push(user.unit_slug); }
+        if (isGuru(user)) { where.push('author_id=?'); args.push(user.id); }
+        else if (!isAdmin && res.scope === 'unit') { where.push('unit_slug=?'); args.push(user.unit_slug); }
         else if (q.get('unit') && res.scope === 'unit') { where.push('unit_slug=?'); args.push(q.get('unit')); }
         if (res.scope === 'major') {
           if (!dudiAll(user)) { where.push('major=?'); args.push(user.unit_slug); }
@@ -1085,7 +1162,7 @@ export async function onRequest(ctx) {
         if (q.get('q') && area === 'prestasi') { where.push('(title LIKE ? OR students LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
         if (q.get('q') && area === 'dudi') { where.push('(name LIKE ? OR address LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
         const limit = clampInt(q.get('limit'), 20, 1, 100), page = clampInt(q.get('page'), 1, 1, 9999);
-        const cols = area === 'posts' ? 'id,slug,title,cover,category,unit_slug,status,featured,views,author_name,published_at' : '*';
+        const cols = area === 'posts' ? 'id,slug,title,cover,category,unit_slug,status,featured,views,author_name,published_at,submitted_at,review_note,reviewed_by,reviewed_at' : '*';
         const [rows, total] = await Promise.all([
           db.prepare(`SELECT ${cols} FROM ${res.table} WHERE ${where.join(' AND ')} ORDER BY ${res.order} LIMIT ? OFFSET ?`).bind(...args, limit, (page - 1) * limit).all(),
           db.prepare(`SELECT COUNT(*) n FROM ${res.table} WHERE ${where.join(' AND ')}`).bind(...args).first(),
@@ -1100,6 +1177,7 @@ export async function onRequest(ctx) {
       if (method === 'GET') return json({ item: existing });
 
       if (method === 'DELETE') {
+        if (isGuru(user) && existing.status === 'publish') return err('Tulisan yang sudah tayang tidak dapat dihapus. Hubungi WMM bila perlu ditarik.', 403);
         await db.prepare(`DELETE FROM ${res.table} WHERE id=?`).bind(id).run();
         if (area === 'gallery' && existing.image?.startsWith('/api/media/'))
           await db.prepare(`DELETE FROM media WHERE id=?`).bind(existing.image.split('/').pop()).run();
@@ -1123,14 +1201,24 @@ export async function onRequest(ctx) {
 
         if (area === 'posts') {
           if (data.content !== undefined && !data.excerpt) data.excerpt = textOnly(data.content).slice(0, 220);
-          if (data.status && !['publish', 'draft'].includes(data.status)) data.status = 'draft';
-          if (data.category && !['berita', 'kegiatan', 'prestasi', 'pengumuman'].includes(data.category)) data.category = 'kegiatan';
+          if (isGuru(user)) {
+            // Guru: kategori terbatas, tidak bisa terbit sendiri — dikirim ke WMM untuk disetujui
+            if (existing && existing.status === 'publish') return err('Tulisan sudah tayang dan tidak dapat diubah lagi. Hubungi WMM bila perlu revisi.', 403);
+            data.status = b.status === 'draft' ? 'draft' : 'review';
+            if (!GURU_CATS.includes(data.category)) data.category = existing && GURU_CATS.includes(existing.category) ? existing.category : 'opini';
+            data.unit_slug = 'sekolah';
+            delete data.published_at; delete data.featured;
+            if (data.status === 'review') { data.submitted_at = now(); data.review_note = null; }
+            if (method === 'POST') data.published_at = null;
+          }
+          if (data.status && !['publish', 'draft', 'review'].includes(data.status)) data.status = 'draft';
+          if (data.category && !POST_CATS.includes(data.category)) data.category = 'kegiatan';
           data.updated_at = now();
           if (method === 'POST') {
             let slug = slugify(data.title), n = 1;
             while (await db.prepare(`SELECT id FROM posts WHERE slug=?`).bind(slug).first()) slug = `${slugify(data.title)}-${++n}`;
-            Object.assign(data, { slug, author_id: user.id, author_name: user.name || user.username, created_at: now() });
-            if (!data.published_at) data.published_at = now();
+            Object.assign(data, { slug, author_id: user.id, author_name: user.name || user.username, author_title: user.title || null, created_at: now() });
+            if (!data.published_at && !isGuru(user)) data.published_at = now();
           }
           if (!isAdmin) delete data.featured; // hanya admin yang bisa menandai berita utama
         } else if (method === 'POST') {
