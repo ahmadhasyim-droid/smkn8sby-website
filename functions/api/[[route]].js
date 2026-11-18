@@ -18,7 +18,7 @@ const GURU_CATS = ['opini', 'tips', 'artikel'];
 const POST_CATS = ['berita', 'kegiatan', 'prestasi', 'pengumuman', ...GURU_CATS];
 const isGuru = (user) => user.role === 'guru';
 const canReview = (user) => user.role === 'admin' || user.unit_slug === 'waka-wmm';
-const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded', 'prestasi_seeded', 'sarpras_seeded', 'backup_interval', 'notif_email', 'notif_from', 'notif_last'];
+const PRIVATE_SETTINGS = ['schema_version', 'ig_token', 'ig_token_refreshed', 'dudi_seeded', 'prestasi_seeded', 'sarpras_seeded', 'tefa_seeded', 'backup_interval', 'notif_email', 'notif_from', 'notif_last'];
 const FEED_TTL = 60 * 60 * 1000; // feed YouTube/Instagram diperbarui tiap 1 jam
 
 // ---------------- feed YouTube & Instagram ----------------
@@ -192,6 +192,7 @@ async function ensureSchema(db) {
   await syncDudi(db);
   await seedPrestasi(db);
   await seedLowongan(db);
+  await seedTefa(db);
   await seedSarpras(db);
   try { await db.prepare(`UPDATE sarpras_assets SET src_updated=updated_at WHERE src_updated IS NULL AND created_by IS NULL`).run(); } catch (_) { /* abaikan */ }
   await db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('schema_version',?)`).bind(SCHEMA_VERSION).run();
@@ -217,6 +218,21 @@ async function seedLowongan(db) {
   const t = now();
   await db.batch(LOWONGAN_SEED.map((j) => db.prepare(`INSERT OR IGNORE INTO lowongan(skey,company,position,location,job_type,majors,description,apply_link,poster,status,created_at)
     VALUES(?,?,?,?,?,?,?,?,?,'buka',?)`).bind(j.skey, j.company, j.position, j.location, j.job_type, j.majors, j.description, j.apply_link, j.poster, t)));
+}
+
+// Katalog TEFA awal: diambil dari daftar "Produk & Layanan" lama (satu baris = satu item), sekali saja
+async function seedTefa(db) {
+  if ((await db.prepare(`SELECT value FROM settings WHERE key='tefa_seeded'`).first('value')) === '1') return;
+  const units = (await db.prepare(`SELECT slug,kompetensi FROM units WHERE type='tefa'`).all()).results;
+  const t = now(), stmts = [];
+  for (const u of units) {
+    const has = await db.prepare(`SELECT COUNT(*) n FROM tefa_products WHERE unit_slug=?`).bind(u.slug).first('n');
+    if (has) continue;
+    String(u.kompetensi || '').split('\n').map((x) => x.trim()).filter(Boolean).forEach((name, i) =>
+      stmts.push(db.prepare(`INSERT INTO tefa_products(unit_slug,name,active,sort,created_at,updated_at) VALUES(?,?,1,?,?,?)`).bind(u.slug, name.slice(0, 150), i + 1, t, t)));
+  }
+  stmts.push(db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('tefa_seeded','1')`));
+  await db.batch(stmts);
 }
 
 // ---------------- VIDEO BERITA (YouTube / TikTok / Instagram) ----------------
@@ -659,6 +675,11 @@ const RESOURCES = {
     fields: { code: 60, name: 200, major: 40, level: 60, units_count: 'int', description: 2000, sort: 'int' },
     required: ['name'],
   },
+  product: {
+    table: 'tefa_products', scope: 'unit', order: 'unit_slug, sort ASC, id DESC',
+    fields: { name: 150, category: 60, price: 'int', price_note: 60, description: 1500, image: 300, duration: 80, badge: 20, active: 'bool', sort: 'int', unit_slug: 40 },
+    required: ['name'],
+  },
   program: {
     table: 'programs', scope: 'unit', order: "unit_slug, sort, id DESC",
     fields: { title: 200, summary: 400, description: 5000, period: 80, status: 20, image: 300, unit_slug: 40, sort: 'int' },
@@ -686,6 +707,7 @@ function canUseResource(user, res) {
   if (user.role === 'admin') return true;
   if (isGuru(user)) return res.table === 'posts'; // guru hanya menulis artikel
   if (res.table === 'programs') return String(user.unit_slug || '').startsWith('waka-'); // Program Sekolah: khusus Waka
+  if (res.table === 'tefa_products') return String(user.unit_slug || '').startsWith('tefa-'); // Katalog: khusus TEFA
   if (res.scope === 'unit') return !!user.unit_slug;
   if (res.scope === 'major') return dudiAll(user) || JURUSAN.has(user.unit_slug);
   return scopeOk(user, res.scope);
@@ -741,7 +763,7 @@ export async function onRequest(ctx) {
     if (method === 'GET' && parts[0] === 'site') {
       const [s, u, counts] = await Promise.all([
         db.prepare(`SELECT key,value FROM settings`).all(),
-        db.prepare(`SELECT slug,type,name,short,tagline,color,icon,logo,cover,parent,sort FROM units ORDER BY sort`).all(),
+        db.prepare(`SELECT slug,type,name,short,tagline,color,icon,logo,cover,parent,sort,CASE WHEN type='tefa' THEN phone END phone,CASE WHEN type='tefa' THEN order_note END order_note FROM units ORDER BY sort`).all(),
         db.prepare(`SELECT (SELECT COUNT(*) FROM posts WHERE status='publish') posts,
           (SELECT COUNT(*) FROM lowongan WHERE status='buka') lowongan, (SELECT COUNT(*) FROM skema) skema,
           (SELECT COUNT(DISTINCT nkey) FROM dudi) dudi, (SELECT COUNT(*) FROM prestasi) prestasi, (SELECT COUNT(*) FROM programs) programs`).first(),
@@ -852,6 +874,17 @@ export async function onRequest(ctx) {
       const where = ['1=1']; const args = [];
       if (q.get('unit')) { where.push('unit_slug=?'); args.push(q.get('unit')); }
       const rows = await db.prepare(`SELECT * FROM programs WHERE ${where.join(' AND ')} ORDER BY CASE status WHEN 'berjalan' THEN 0 WHEN 'rencana' THEN 1 ELSE 2 END, sort, id DESC LIMIT 300`).bind(...args).all();
+      return json({ items: rows.results }, 200, { 'Cache-Control': 'public, max-age=60' });
+    }
+
+    // Katalog produk & layanan TEFA (publik)
+    if (method === 'GET' && parts[0] === 'produk') {
+      const where = ['p.active=1']; const args = [];
+      if (q.get('unit')) { where.push('p.unit_slug=?'); args.push(q.get('unit')); }
+      if (q.get('cat')) { where.push('p.category=?'); args.push(q.get('cat')); }
+      if (q.get('q')) { where.push('(p.name LIKE ? OR p.description LIKE ? OR p.category LIKE ?)'); const k = '%' + str(q.get('q'), 60) + '%'; args.push(k, k, k); }
+      const rows = await db.prepare(`SELECT p.id,p.unit_slug,p.name,p.category,p.price,p.price_note,p.description,p.image,p.duration,p.badge FROM tefa_products p
+        JOIN units u ON u.slug=p.unit_slug WHERE ${where.join(' AND ')} ORDER BY u.sort, p.sort ASC, p.id DESC LIMIT 500`).bind(...args).all();
       return json({ items: rows.results }, 200, { 'Cache-Control': 'public, max-age=60' });
     }
 
@@ -1011,7 +1044,8 @@ export async function onRequest(ctx) {
       if (method === 'PUT') {
         const b = await body();
         const F = { name: 120, short: 20, tagline: 250, color: 9, logo: 300, cover: 300, description: 5000, visi: 2000, misi: 4000,
-          kompetensi: 4000, prospek: 4000, video: 300, head_name: 120, head_title: 120, head_photo: 300, phone: 40, email: 120, instagram: 60 };
+          kompetensi: 4000, prospek: 4000, video: 300, head_name: 120, head_title: 120, head_photo: 300, phone: 40, email: 120, instagram: 60,
+          hours: 200, address: 200, order_note: 400 };
         const sets = [], args = [];
         for (const [k, max] of Object.entries(F)) if (k in b) { sets.push(`${k}=?`); args.push(str(b[k], max)); }
         if (b.color && !/^#[0-9a-fA-F]{6}$/.test(b.color)) return err('Warna harus format hex, mis. #1E5AA8');
@@ -1225,6 +1259,10 @@ export async function onRequest(ctx) {
         if (method === 'POST') for (const r of res.required) if (!data[r]) return err(`Kolom "${r}" wajib diisi.`);
         if (method === 'PUT') for (const r of res.required) if (r in data && !data[r]) return err(`Kolom "${r}" wajib diisi.`);
 
+        if (area === 'product') {
+          if (data.badge && !['terlaris', 'baru', 'preorder', 'promo'].includes(data.badge)) data.badge = '';
+          if (data.price !== undefined && (data.price === null || data.price < 0)) data.price = null;
+        }
         if (area === 'posts') {
           if ('video_url' in data) data.video_url = await normalizeVideo(data.video_url);
           if (data.content !== undefined && !data.excerpt) data.excerpt = textOnly(data.content).slice(0, 220);

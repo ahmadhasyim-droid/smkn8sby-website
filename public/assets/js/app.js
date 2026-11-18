@@ -36,6 +36,7 @@ const ICONS = {
   facebook: '<path d="M14 21v-7.5h2.6l.4-3H14V8.6c0-.9.3-1.6 1.6-1.6H17V4.3c-.3 0-1.2-.1-2.2-.1-2.2 0-3.8 1.4-3.8 3.9v2.4H8.5v3H11V21"/>',
   youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10 9.3v5.4l4.6-2.7z" fill="currentColor"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+  bag: '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   chev: '<path d="M6 9l6 6 6-6"/>',
@@ -215,7 +216,7 @@ function renderShell() {
       </div></div>
       <div class="dd"><button aria-haspopup="true">Program Keahlian ${icon('chev')}</button><div class="dd-panel">${jur.map(ddItem).join('')}</div></div>
       <div class="dd"><button aria-haspopup="true">Lembaga ${icon('chev')}</button><div class="dd-panel">${lem.map(ddItem).join('')}</div></div>
-      ${tefa.length ? `<div class="dd"><button aria-haspopup="true">TEFA ${icon('chev')}</button><div class="dd-panel">${tefa.map(ddItem).join('')}</div></div>` : ''}
+      ${tefa.length ? `<div class="dd"><button aria-haspopup="true">TEFA ${icon('chev')}</button><div class="dd-panel">${ddLink('/tefa', 'Toko TEFA', 'Semua produk & layanan, pesan via WhatsApp', 'bag', '#f26836')}${tefa.map(ddItem).join('')}</div></div>` : ''}
       <a href="/dudi"${act('dudi')}>DUDI</a>
       <a href="/perpustakaan"${act('perpustakaan')}>Perpustakaan</a>
       <div class="dd"><button aria-haspopup="true"${['berita', 'artikel', 'agenda', 'galeri', 'prestasi'].includes(page) ? ' class="active"' : ''}>Informasi ${icon('chev')}</button><div class="dd-panel">
@@ -256,7 +257,7 @@ function renderShell() {
       <div><h4>Program Keahlian</h4><ul>${jur.map((u) => `<li><a href="${unitUrl(u)}">${esc(u.name)}</a></li>`).join('')}</ul></div>
       <div><h4>Lembaga & Layanan</h4><ul>${lem.map((u) => `<li><a href="${unitUrl(u)}">${esc(u.name)}</a></li>`).join('')}
         ${s.spmb_link ? `<li><a href="${esc(safeUrl(s.spmb_link))}" target="_blank" rel="noopener">Info SPMB / PPDB</a></li>` : ''}</ul></div>
-      ${tefa.length ? `<div><h4>Teaching Factory</h4><ul>${tefa.map((u) => `<li><a href="${unitUrl(u)}">${esc(u.name)}</a></li>`).join('')}</ul></div>` : ''}
+      ${tefa.length ? `<div><h4>Teaching Factory</h4><ul><li><a href="/tefa"><b>Toko TEFA</b></a></li>${tefa.map((u) => `<li><a href="${unitUrl(u)}">${esc(u.name)}</a></li>`).join('')}</ul></div>` : ''}
       <div><h4>Jelajahi</h4><ul>
         <li><a href="/profil">Profil Sekolah</a></li><li><a href="/program">Program Sekolah</a></li><li><a href="/dudi">DUDI / Mitra Industri</a></li><li><a href="/perpustakaan">Perpustakaan</a></li><li><a href="/prestasi">Prestasi Siswa</a></li><li><a href="/berita">Berita & Kegiatan</a></li>
         <li><a href="/agenda">Agenda</a></li><li><a href="/galeri">Galeri</a></li><li><a href="/kontak">Kontak</a></li>
@@ -438,7 +439,7 @@ PAGES.home = async (main) => {
   </div></section>
 
   ${tefa.length ? `<section class="section tefa-sec"><div class="wrap">
-    ${secHead('03', 'Teaching Factory', 'Belajar sambil<br>berproduksi', 'Setiap program keahlian punya TEFA — unit produksi dan jasa sungguhan yang melayani masyarakat dan industri.')}
+    ${secHead('03', 'Teaching Factory', 'Belajar sambil<br>berproduksi', 'Setiap program keahlian punya TEFA — unit produksi dan jasa sungguhan yang melayani masyarakat dan industri.', `<a class="btn btn-orange" href="/tefa">${icon('bag')} Belanja di Toko TEFA</a>`)}
     <div class="tefa-grid">${tefa.map((u) => `
       <a class="tefa-card" href="${unitUrl(u)}" style="--c:${u.color}">
         <span class="t-ico">${unitMark(u)}</span>
@@ -514,6 +515,110 @@ PAGES.home = async (main) => {
 };
 
 // ---------- Profil ----------
+
+// ================= KATALOG TEFA (toko sekolah) =================
+const BADGE = { terlaris: 'Terlaris', baru: 'Baru', promo: 'Promo', preorder: 'Pre-order' };
+const rupiah = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+const priceText = (p) => (p.price ? `${p.price_note && /^mulai/i.test(p.price_note) ? '<small>mulai</small> ' : ''}${rupiah(p.price)}${p.price_note && !/^mulai/i.test(p.price_note) ? ` <small>${esc(p.price_note)}</small>` : ''}` : `<small>${esc(p.price_note || 'Harga menyesuaikan')}</small>`);
+const tefaWa = (u) => (u && u.phone) || SITE.settings.whatsapp || '';
+const prodCard = (p, showUnit) => {
+  const u = UNITS[p.unit_slug] || {};
+  return `<article class="prod-card" style="--c:${u.color || '#235ba4'}">
+    <div class="pc-img">${p.image ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" loading="lazy">` : `<span class="pc-ph">${icon(u.icon || 'factory')}</span>`}
+      ${p.badge ? `<span class="pc-badge b-${esc(p.badge)}">${esc(BADGE[p.badge] || p.badge)}</span>` : ''}
+      ${showUnit ? `<a class="pc-unit" href="${unitUrl(u)}#layanan">${esc(u.short || u.name || '')}</a>` : ''}</div>
+    <div class="pc-body">
+      ${p.category ? `<span class="pc-cat">${esc(p.category)}</span>` : ''}
+      <h3>${esc(p.name)}</h3>
+      ${p.description ? `<p>${esc(p.description)}</p>` : ''}
+      ${p.duration ? `<span class="pc-dur">${icon('clock')}${esc(p.duration)}</span>` : ''}
+      <div class="pc-foot"><span class="pc-price">${priceText(p)}</span>
+        <button class="btn btn-orange btn-sm" data-order="${p.id}">${icon('wa')} Pesan</button></div>
+    </div></article>`;
+};
+// Formulir singkat sebelum diteruskan ke WhatsApp TEFA
+function orderModal(p) {
+  const u = UNITS[p.unit_slug] || {}, wa = tefaWa(u);
+  const dlg = document.createElement('div'); dlg.className = 'order-modal'; dlg.setAttribute('role', 'dialog'); dlg.setAttribute('aria-modal', 'true');
+  dlg.innerHTML = `<form class="om-card">
+    <button type="button" class="om-x" aria-label="Tutup">${icon('x')}</button>
+    <div class="om-head" style="--c:${u.color || '#235ba4'}">${p.image ? `<img src="${esc(p.image)}" alt="">` : `<span class="pc-ph">${icon(u.icon || 'factory')}</span>`}
+      <div><span class="mono">${esc(u.name || 'TEFA')}</span><b>${esc(p.name)}</b><span class="pc-price">${priceText(p)}</span></div></div>
+    <div class="om-fields">
+      <label>Nama pemesan *<input name="nama" required autocomplete="name" placeholder="Nama Anda"></label>
+      <label class="half">Jumlah<input name="jumlah" type="number" min="1" value="1"></label>
+      <label class="half">${/salon|spa|rias|wajah|rambut|kamar|layanan/i.test((p.category || '') + p.name) ? 'Tanggal / jam rencana' : 'Tanggal dibutuhkan'}<input name="tanggal" placeholder="mis. Sabtu, 23 Nov, 10.00"></label>
+      <label>Catatan (opsional)<textarea name="catatan" rows="3" placeholder="Varian, ukuran, warna, alamat antar, dsb."></textarea></label>
+    </div>
+    ${u.order_note ? `<p class="om-note">${esc(u.order_note)}</p>` : ''}
+    ${wa ? `<button class="btn btn-orange btn-block">${icon('wa')} Lanjutkan ke WhatsApp</button><p class="om-small">Pesan akan dikirim ke WhatsApp ${esc(u.name || 'sekolah')} (${esc(wa)}). Harga & ketersediaan dikonfirmasi oleh petugas.</p>`
+      : `<p class="om-note">Nomor WhatsApp pemesanan belum tersedia. Silakan hubungi sekolah melalui halaman <a href="/kontak">Kontak</a>.</p>`}
+  </form>`;
+  document.body.appendChild(dlg); document.body.style.overflow = 'hidden';
+  const close = () => { dlg.remove(); document.body.style.overflow = ''; };
+  dlg.addEventListener('click', (e) => { if (e.target === dlg || e.target.closest('.om-x')) close(); });
+  document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); } });
+  setTimeout(() => $('[name=nama]', dlg).focus(), 50);
+  $('form', dlg).onsubmit = (e) => {
+    e.preventDefault(); if (!wa) return;
+    const f = Object.fromEntries(new FormData(e.target));
+    const msg = [`Halo ${u.name || 'TEFA'} SMKN 8 Surabaya, saya ingin memesan:`, '',
+      `*${p.name}*${p.price ? ` (${rupiah(p.price)}${p.price_note ? ' ' + p.price_note : ''})` : ''}`,
+      `Jumlah: ${f.jumlah || 1}`, f.tanggal ? `Tanggal/jam: ${f.tanggal}` : '', `Nama: ${f.nama}`, f.catatan ? `Catatan: ${f.catatan}` : '',
+      '', `(dari website: ${location.origin}${unitUrl(u)})`].filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n');
+    window.open(`${waLink(wa)}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+    close();
+  };
+}
+// Katalog dengan pencarian & filter kategori (dan TEFA bila showUnit)
+function mountCatalog(root, items, { showUnit = false, unitFilter = '' } = {}) {
+  let cat = '', unit = unitFilter, q = '';
+  const tefas = Object.values(UNITS).filter((u) => u.type === 'tefa');
+  root.innerHTML = `<div class="cat-tools">
+      <label class="cat-search">${icon('search')}<input type="search" placeholder="Cari produk atau layanan…" aria-label="Cari produk"></label>
+      ${showUnit ? `<div class="filters cat-units">${[['', 'Semua TEFA', '#0d1a2e'], ...tefas.map((u) => [u.slug, u.name.replace(/^TEFA\s*/i, ''), u.color])].map(([v, l, c]) => `<button class="chip-btn${v === unit ? ' on' : ''}" data-u="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)}</button>`).join('')}</div>` : ''}
+      <div class="filters cat-cats"></div></div>
+    <div class="prod-grid"></div>`;
+  const draw = () => {
+    const pool = items.filter((p) => !unit || p.unit_slug === unit);
+    const cats = [...new Set(pool.map((p) => p.category).filter(Boolean))];
+    if (cat && !cats.includes(cat)) cat = '';
+    $('.cat-cats', root).innerHTML = cats.length > 1 ? [['', 'Semua kategori'], ...cats.map((c) => [c, c])].map(([v, l]) => `<button class="chip-btn${v === cat ? ' on' : ''}" data-c="${esc(v)}">${esc(l)}</button>`).join('') : '';
+    const k = q.toLowerCase();
+    const list = pool.filter((p) => (!cat || p.category === cat) && (!k || `${p.name} ${p.category || ''} ${p.description || ''}`.toLowerCase().includes(k)));
+    $('.prod-grid', root).innerHTML = list.length ? list.map((p) => prodCard(p, showUnit)).join('') : `<div style="grid-column:1/-1">${empty(items.length ? 'Produk tidak ditemukan. Coba kata kunci lain.' : 'Katalog produk & layanan belum diisi.')}</div>`;
+  };
+  root.addEventListener('click', (e) => {
+    const o = e.target.closest('[data-order]'); if (o) { const p = items.find((x) => String(x.id) === o.dataset.order); if (p) orderModal(p); return; }
+    const c = e.target.closest('[data-c]'); if (c) { cat = c.dataset.c; draw(); return; }
+    const u = e.target.closest('[data-u]'); if (u) { unit = u.dataset.u; cat = ''; $$('.cat-units button', root).forEach((b) => b.classList.toggle('on', b === u)); draw(); }
+  });
+  let t; $('.cat-search input', root).addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { q = e.target.value.trim(); draw(); }, 150); });
+  draw();
+}
+const orderSteps = (u) => `<ol class="order-steps">
+  <li><b>Pilih</b><span>produk atau layanan di katalog</span></li>
+  <li><b>Klik "Pesan"</b><span>isi nama, jumlah & tanggal</span></li>
+  <li><b>Kirim via WhatsApp</b><span>pesan otomatis terisi</span></li>
+  <li><b>Konfirmasi</b><span>${u ? 'petugas TEFA membalas harga & jadwal' : 'petugas TEFA membalas & mengatur jadwal'}</span></li></ol>`;
+
+PAGES.toko = async (main) => {
+  setTitle('Toko TEFA');
+  const tefas = Object.values(UNITS).filter((u) => u.type === 'tefa');
+  main.innerHTML = `${pageHero('Toko TEFA SMKN 8 Surabaya', 'Produk & layanan karya siswa dari Teaching Factory: kue & katering, salon & spa, jasa desain & foto, jahit busana, hingga layanan perhotelan. Pesan langsung via WhatsApp.', ['Teaching Factory', 'Toko TEFA'])}
+  <section class="section" style="padding-top:36px"><div class="wrap">
+    ${orderSteps()}
+    <div id="toko"><div class="skel" style="height:320px"></div></div>
+  </div></section>
+  <section class="section alt"><div class="wrap">
+    ${secHead('', 'Teaching Factory', 'Kenali unit TEFA kami')}
+    <div class="tefa-grid">${tefas.map((u) => `<a class="tefa-card" href="${unitUrl(u)}" style="--c:${u.color}"><span class="t-ico">${unitMark(u)}</span><span class="mono">TEFA · ${esc(UNITS[u.parent]?.short || '')}</span><h3>${esc(u.name.replace(/^TEFA\s*/i, ''))}</h3><p>${esc(u.tagline || '')}</p><span class="t-go">Lihat profil ${icon('arrow')}</span></a>`).join('')}</div>
+  </div></section>`;
+  const d = await api('produk');
+  const pre = params.get('tefa') ? 'tefa-' + params.get('tefa') : '';
+  mountCatalog($('#toko'), d.items, { showUnit: true, unitFilter: UNITS[pre] ? pre : '' });
+};
+
 PAGES.profil = async (main) => {
   const s = SITE.settings; setTitle('Profil Sekolah');
   const units = Object.values(UNITS);
@@ -554,7 +659,7 @@ PAGES.unit = async (main) => {
   const isJur = unit.type === 'jurusan', isTefa = unit.type === 'tefa', isWaka = unit.type === 'waka', isBKK = slug === 'bkk', isLSP = slug === 'lsp';
   const parent = isTefa ? UNITS[unit.parent] : null;
   const myTefa = isJur ? Object.values(UNITS).find((u) => u.type === 'tefa' && u.parent === slug) : null;
-  const tabs = [['profil', 'Profil'], [isLSP ? 'skema' : isBKK ? 'lowongan' : isTefa ? 'layanan' : isWaka ? 'program' : 'kompetensi', isLSP ? 'Skema Sertifikasi' : isBKK ? 'Lowongan Kerja' : isTefa ? 'Produk & Layanan' : isWaka ? 'Program Kerja' : 'Kompetensi'],
+  const tabs = [['profil', 'Profil'], [isLSP ? 'skema' : isBKK ? 'lowongan' : isTefa ? 'layanan' : isWaka ? 'program' : 'kompetensi', isLSP ? 'Skema Sertifikasi' : isBKK ? 'Lowongan Kerja' : isTefa ? 'Produk & Pemesanan' : isWaka ? 'Program Kerja' : 'Kompetensi'],
     ...(isJur ? [['dudi', 'Mitra DUDI'], ['prestasi', 'Prestasi']] : []), ['kegiatan', 'Kegiatan'], ['agenda', 'Agenda'], ['galeri', 'Galeri']];
   const others = Object.values(UNITS).filter((u) => u.slug !== slug);
   const komp = lines(unit.kompetensi), prospek = lines(unit.prospek);
@@ -580,8 +685,16 @@ PAGES.unit = async (main) => {
                  <div class="unit-block"><h2>Layanan BKK</h2><div class="check-grid">${komp.map((k, i) => `<div><span class="n">${String(i + 1).padStart(2, '0')}</span>${esc(k)}</div>`).join('')}</div></div>` : ''}
       ${isLSP ? `<div class="unit-block" id="skema"><h2>Skema Sertifikasi</h2><div id="skemaList"></div></div>
                  <div class="unit-block"><h2>Layanan LSP</h2><div class="check-grid">${komp.map((k, i) => `<div><span class="n">${String(i + 1).padStart(2, '0')}</span>${esc(k)}</div>`).join('')}</div></div>` : ''}
-      ${isTefa ? `<div class="unit-block" id="layanan"><h2>Produk & Layanan</h2><div class="svc-grid">${komp.map((k, i) => `<div><span class="n">${String(i + 1).padStart(2, '0')}</span><b>${esc(k)}</b></div>`).join('') || empty('Belum diisi.')}</div>
-        ${unit.phone ? `<div class="order-band"><div><b>Ingin memesan atau reservasi?</b><span>Hubungi ${esc(unit.name)} melalui WhatsApp.</span></div><a class="btn btn-orange" href="${waLink(unit.phone)}?text=${encodeURIComponent('Halo ' + unit.name + ' SMKN 8 Surabaya, saya ingin bertanya/memesan:')}" target="_blank" rel="noopener">${icon('wa')} Pesan via WhatsApp</a></div>` : ''}</div>` : ''}
+      ${isTefa ? `<div class="unit-block" id="layanan"><h2>Produk & Layanan</h2>
+        <div class="tefa-info">
+          ${unit.hours ? `<div>${icon('clock')}<span><small>Jam layanan</small>${esc(unit.hours)}</span></div>` : ''}
+          ${unit.address ? `<div>${icon('pin')}<span><small>Lokasi</small>${esc(unit.address)}</span></div>` : ''}
+          ${tefaWa(unit) ? `<a href="${waLink(tefaWa(unit))}?text=${encodeURIComponent('Halo ' + unit.name + ' SMKN 8 Surabaya, saya ingin bertanya tentang produk/layanan:')}" target="_blank" rel="noopener">${icon('wa')}<span><small>Tanya via WhatsApp</small>${esc(tefaWa(unit))}</span></a>` : ''}
+        </div>
+        ${unit.order_note ? `<p class="tefa-note">${esc(unit.order_note)}</p>` : ''}
+        ${orderSteps(unit)}
+        <div id="tefaCat"><div class="skel" style="height:300px"></div></div>
+        <p style="margin-top:18px"><a class="link-arrow" href="/tefa">Lihat produk semua TEFA di Toko TEFA ${icon('arrow')}</a></p></div>` : ''}
       ${slug === 'waka-sarpras' ? `<div class="order-band sarpras-band"><div><b>SI-SARPRAS — Sistem Informasi Sarana & Prasarana</b><span>Inventaris aset, serah terima BAST/BAPB, scan QR barang, serta laporan & cetak.</span></div><a class="btn btn-orange" href="/sarpras">Buka SI-SARPRAS ${icon('arrowUR')}</a></div>` : ''}
       ${isWaka ? `<div class="unit-block" id="program"><h2>Program Kerja</h2><div class="prog-list" id="unitProg"></div></div>
         <div class="unit-block"><h2>Tugas & Fungsi</h2><div class="check-grid">${komp.map((k, i) => `<div><span class="n">${String(i + 1).padStart(2, '0')}</span>${esc(k)}</div>`).join('') || empty('Belum diisi.')}</div></div>` : ''}
@@ -617,6 +730,7 @@ PAGES.unit = async (main) => {
   $$('.unit-block[id]').forEach((b) => io.observe(b));
 
   if (isJur) api('prestasi?unit=' + slug + '&limit=6').then((d) => { PRES_CACHE = d.items; $('#unitPres').innerHTML = d.items.length ? d.items.map(presCard).join('') : empty('Belum ada data prestasi.'); }).catch(() => {});
+  if (isTefa) api('produk?unit=' + slug).then((d) => mountCatalog($('#tefaCat'), d.items)).catch(() => { $('#tefaCat').innerHTML = empty('Katalog belum dapat dimuat.'); });
   if (isWaka) api('program?unit=' + slug).then((d) => { $('#unitProg').innerHTML = d.items.length ? d.items.map((p) => programCard(p, true)).join('') : empty('Program kerja belum diisi.'); }).catch(() => {});
   const [news, agenda, gal] = await Promise.all([api(`posts?unit=${slug}&limit=4`), api(`agenda?unit=${slug}&limit=8`), api(`gallery?unit=${slug}&limit=12`)]);
   $('#unitNews').innerHTML = news.items.length ? news.items.map((p) => postCard(p)).join('') : `<div style="grid-column:1/-1">${empty('Belum ada kegiatan yang dipublikasikan.')}</div>`;

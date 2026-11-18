@@ -277,3 +277,15 @@ Link yang dikenali:
 - Instagram: `instagram.com/reel/…` atau `instagram.com/p/…`
 
 Video/akun harus **publik** agar bisa diputar di website.
+
+## Toko TEFA & Katalog Produk/Layanan
+
+**Untuk pengunjung**
+- Halaman tiap TEFA (mis. `/tefa/kuliner`) → tab **Produk & Pemesanan**: info jam layanan, lokasi, WhatsApp, catatan pemesanan, langkah cara memesan, lalu **katalog** (foto, kategori, harga, estimasi waktu, label Terlaris/Baru/Promo/Pre-order) dengan **pencarian** dan **filter kategori**.
+- Halaman gabungan **Toko TEFA** di **/tefa** (menu *TEFA → Toko TEFA*, tombol *Belanja di Toko TEFA* di beranda, tautan di footer): produk kelima TEFA sekaligus dengan filter per TEFA & kategori. Bisa langsung membuka TEFA tertentu: `/tefa?tefa=kuliner`.
+- Tombol **Pesan** membuka formulir singkat (nama, jumlah, tanggal, catatan) lalu meneruskan ke **WhatsApp TEFA** dengan pesan pesanan yang sudah tersusun. Tidak ada pembayaran online; harga & jadwal dikonfirmasi petugas TEFA lewat WhatsApp.
+
+**Untuk pengelola TEFA** (akun unit TEFA; admin juga bisa untuk semua TEFA)
+- Menu **Katalog Produk & Layanan**: tambah/ubah/hapus produk, foto, kategori (ada saran), harga + keterangan harga (mis. *mulai*, *per porsi*), estimasi waktu, label, urutan, dan tampil/sembunyikan.
+- **Profil Unit**: isi **No. WhatsApp pemesanan** (bila kosong memakai WhatsApp sekolah), **Jam layanan**, **Lokasi layanan**, dan **Catatan pemesanan**.
+- Daftar "Produk & layanan" lama otomatis dijadikan item katalog awal (tanpa foto & harga); tinggal dilengkapi.

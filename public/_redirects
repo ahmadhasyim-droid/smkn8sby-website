@@ -3,5 +3,6 @@
 /lembaga/:slug   /unit     200
 /berita/:slug    /artikel  200
 /login           /admin/   302
+/tefa            /toko     200
 /tefa/:slug      /unit     200
 /waka/:slug      /unit     200

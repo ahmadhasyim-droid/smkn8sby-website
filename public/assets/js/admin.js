@@ -28,6 +28,7 @@ const P = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+  bag: '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
   shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
   dl: '<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>',
   pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
@@ -60,6 +61,8 @@ const unitTag = (slug) => `<span class="tag" style="--c:${slug === 'sekolah' ? '
 const unitOptions = () => [{ v: 'sekolah', l: 'Sekolah (umum)' }, ...UNITS.map((u) => ({ v: u.slug, l: u.name }))];
 const TYPE_LABEL = { jurusan: 'Program Keahlian', lembaga: 'Lembaga', tefa: 'Teaching Factory', waka: 'Wakil Kepala Sekolah' };
 const unitUrl = (u) => (u.type === 'lembaga' ? `/lembaga/${u.slug}` : u.type === 'waka' ? `/waka/${u.slug.replace(/^waka-/, '')}` : u.type === 'tefa' ? `/tefa/${u.slug.replace(/^tefa-/, '')}` : `/jurusan/${u.slug}`);
+const BADGE = { terlaris: 'Terlaris', baru: 'Baru', promo: 'Promo', preorder: 'Pre-order' };
+const rupiah = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
 const jurOptions = () => UNITS.filter((u) => u.type === 'jurusan').map((u) => ({ v: u.slug, l: u.name }));
 
 // ---------- Unggah gambar (otomatis diperkecil di browser) ----------
@@ -112,7 +115,7 @@ function fieldHtml(f, val) {
         <input type="file" accept="image/*" hidden>
       </div>
       <div class="editor-area" contenteditable="true" data-placeholder="Tulis isi berita di sini…">${v}</div></div></div>`;
-    default: return wrap(`<input type="${f.type || 'text'}" ${name} value="${esc(v)}" ${f.required ? 'required' : ''} ${f.max ? `maxlength="${f.max}"` : ''} ${f.placeholder ? `placeholder="${esc(f.placeholder)}"` : ''}>`);
+    default: return wrap(`<input type="${f.type || 'text'}" ${name} value="${esc(v)}" ${f.list ? `list="${f.list}" autocomplete="off"` : ''} ${f.required ? 'required' : ''} ${f.max ? `maxlength="${f.max}"` : ''} ${f.placeholder ? `placeholder="${esc(f.placeholder)}"` : ''}>`);
   }
 }
 function bindForm(root, fields) {
@@ -260,6 +263,32 @@ const RES = {
       { k: 'logo', label: 'Logo perusahaan', type: 'logo' },
     ],
   },
+  product: {
+    title: 'Katalog Produk & Layanan', single: 'produk / layanan', icon: 'bag',
+    cols: [
+      ['', (r) => (r.image ? `<img class="thumb" src="${esc(r.image)}" alt="">` : `<span class="thumb" style="display:grid;place-items:center;color:var(--muted);font-size:.7rem">tanpa foto</span>`)],
+      ['Produk / layanan', (r) => `<span class="t-title">${esc(r.name)}${r.badge ? ` <span class="tag" style="--c:#f26836">${esc(BADGE[r.badge] || r.badge)}</span>` : ''}</span><span class="t-sub">${esc(r.category || 'Tanpa kategori')}${r.duration ? ' · ' + esc(r.duration) : ''}</span>`],
+      ['Harga', (r) => (r.price ? `<b>${rupiah(r.price)}</b>${r.price_note ? `<span class="t-sub">${esc(r.price_note)}</span>` : ''}` : `<span class="t-sub">${esc(r.price_note || 'Harga belum diisi')}</span>`)],
+      ['Status', (r) => `<span class="tag ${r.active ? 'ok' : 'draft'}">${r.active ? 'Ditampilkan' : 'Disembunyikan'}</span>`],
+      ['Unit', (r) => unitTag(r.unit_slug), 'adminOnly'],
+    ],
+    main: () => [
+      { k: 'name', label: 'Nama produk / layanan', required: true, placeholder: 'mis. Kue Bolu Pandan, Creambath, Jasa Desain Logo' },
+      { k: 'category', label: 'Kategori', half: true, list: 'catlist', placeholder: 'mis. Kue, Katering, Salon, Desain', help: 'Dipakai sebagai tombol filter. Pilih dari daftar atau ketik kategori baru.' },
+      { k: 'duration', label: 'Estimasi waktu (opsional)', half: true, placeholder: 'mis. ±60 menit, jadi 3 hari, pesan H-2' },
+      { k: 'price', label: 'Harga (Rp)', type: 'number', half: true, help: 'Angka saja tanpa titik, mis. 45000. Kosongkan bila harga menyesuaikan.' },
+      { k: 'price_note', label: 'Keterangan harga (opsional)', half: true, placeholder: 'mis. mulai, per porsi, per jam, nego' },
+      { k: 'description', label: 'Keterangan singkat', type: 'textarea', rows: 4, help: 'Isi, ukuran, varian, atau hal yang perlu diketahui pemesan (maks. ±3 kalimat).' },
+    ],
+    side: () => [
+      { k: 'image', label: 'Foto produk / hasil layanan', type: 'image', help: 'Foto terang & jelas, sebaiknya persegi atau mendatar.' },
+      { k: 'badge', label: 'Label (opsional)', type: 'select', opts: () => [{ v: '', l: '— Tanpa label —' }, ...Object.entries(BADGE).map(([v, l]) => ({ v, l }))] },
+      { k: 'active', label: 'Tampilkan di website', type: 'check', default: 1 },
+      { k: 'sort', label: 'Urutan tampil', type: 'number', default: 0, help: 'Angka kecil tampil lebih dulu.' },
+      ...(isAdmin() ? [{ k: 'unit_slug', label: 'TEFA', type: 'select', opts: () => UNITS.filter((u) => u.type === 'tefa').map((u) => ({ v: u.slug, l: u.name })) }] : []),
+    ],
+    view: (r) => unitUrl(UNIT[r.unit_slug] || { type: 'tefa', slug: r.unit_slug }) + '#layanan',
+  },
   program: {
     title: 'Program Sekolah', single: 'program', icon: 'clip',
     cols: [
@@ -351,7 +380,7 @@ function menu() {
   if (canReview()) items.splice(1, 0, ['review', 'Persetujuan Tulisan', 'check']);
   const groups = [['Konten', items]];
   if (isAdmin()) {
-    groups.push(['Unit', [['units', 'Profil Unit & Waka', 'unit'], ['dudi', 'DUDI / Mitra Industri', 'handshake'], ['lowongan', 'Lowongan (BKK)', 'job'], ['skema', 'Skema (LSP)', 'badge'], ['/sarpras', 'SI-SARPRAS (Inventaris)', 'box']]]);
+    groups.push(['Unit', [['units', 'Profil Unit & Waka', 'unit'], ['product', 'Katalog TEFA', 'bag'], ['dudi', 'DUDI / Mitra Industri', 'handshake'], ['lowongan', 'Lowongan (BKK)', 'job'], ['skema', 'Skema (LSP)', 'badge'], ['/sarpras', 'SI-SARPRAS (Inventaris)', 'box']]]);
     groups.push(['Sekolah', [['settings', 'Pengaturan Situs', 'gear'], ['users', 'Pengguna & Akses', 'users'], ['messages', 'Pesan Masuk', 'mail'], ['backup', 'Backup & Pemulihan', 'shield']]]);
   } else {
     const g = [[`units/${u}`, 'Profil Unit', 'unit']];
@@ -359,6 +388,7 @@ function menu() {
     if (isBkk() || UNIT[u]?.type === 'jurusan') g.push(['dudi', 'DUDI / Mitra Industri', 'handshake']);
     if (u === 'lsp') g.push(['skema', 'Skema Sertifikasi', 'badge']);
     if (u === 'waka-sarpras') g.push(['/sarpras', 'SI-SARPRAS (Inventaris)', 'box']);
+    if (UNIT[u]?.type === 'tefa') g.unshift(['product', 'Katalog Produk & Layanan', 'bag']);
     groups.push([UNIT[u]?.short || 'Unit', g]);
   }
   return groups;
@@ -375,7 +405,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 21</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 22</span>
       </div>
     </aside>
     <div class="main">
@@ -433,7 +463,7 @@ async function listView(view, key) {
     </div><div class="table-wrap" id="tbl"></div><div class="pager" id="pg"></div>`;
   const load = async () => {
     const d = await api(`admin/${key}?page=${page}&limit=20${q ? '&q=' + encodeURIComponent(q) : ''}${unit ? '&unit=' + unit : ''}`);
-    const cols = R.cols.filter((c) => !(c[2] === 'nonGuru' && isGuru()));
+    const cols = R.cols.filter((c) => !(c[2] === 'nonGuru' && isGuru()) && !(c[2] === 'adminOnly' && !isAdmin()));
     $('#tbl').innerHTML = d.items.length ? `<table><thead><tr>${cols.map(([h]) => `<th>${h}</th>`).join('')}<th></th></tr></thead><tbody>
       ${d.items.map((r) => `<tr>${cols.map(([, fn]) => `<td>${fn(r)}</td>`).join('')}<td class="act">
         ${R.view && R.view(r) ? `<a class="btn btn-line btn-sm" href="${R.view(r)}" target="_blank" title="Lihat">${ic('ext')}</a>` : ''}
@@ -476,6 +506,13 @@ async function editView(view, key, id) {
   </div>${side.length ? '' : `<div class="form-actions"><a class="btn btn-line" href="#/${key}">Batal</a><button class="btn btn-primary" type="submit">Simpan</button></div>`}</form>`;
   bindForm(view, all);
   if (key === 'posts') bindVideoPreview(view);
+  if (key === 'product') { // saran kategori: yang sudah dipakai + contoh umum
+    const used = (await api('admin/product').catch(() => ({ items: [] }))).items.map((r) => r.category).filter(Boolean);
+    const sug = { 'tefa-kuliner': ['Kue & Roti', 'Katering', 'Minuman', 'Snack Box'], 'tefa-kecantikan': ['Salon Rambut', 'Perawatan Wajah', 'Spa & Pijat', 'Rias / Make-up'],
+      'tefa-perhotelan': ['Kamar', 'Laundry', 'Event & MICE', 'Food & Beverage'], 'tefa-dkv': ['Desain Grafis', 'Foto', 'Video', 'Cetak'], 'tefa-busana': ['Jasa Jahit', 'Seragam', 'Produk Fashion', 'Permak'] }[item.unit_slug || ME.unit_slug] || [];
+    const dl = document.createElement('datalist'); dl.id = 'catlist';
+    dl.innerHTML = [...new Set([...used, ...sug])].map((c) => `<option value="${esc(c)}">`).join(''); view.appendChild(dl);
+  }
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const data = readForm(view, all);
@@ -556,7 +593,12 @@ V.units = async (view, slug) => {
     { k: 'video', label: 'Link video profil YouTube (opsional)', type: 'url', placeholder: 'https://www.youtube.com/watch?v=…', help: 'Tampil di bagian atas profil. Salin link video dari YouTube.' },
     { k: 'description', label: 'Profil / deskripsi', type: 'textarea', rows: 6 },
     { k: 'visi', label: 'Visi', type: 'textarea', rows: 2, half: true }, { k: 'misi', label: 'Misi (satu baris satu poin)', type: 'textarea', rows: 2, half: true },
-    { k: 'kompetensi', label: isJur ? 'Kompetensi yang dipelajari (satu baris satu poin)' : isTefa ? 'Produk & layanan (satu baris satu poin)' : isWaka ? 'Tugas & fungsi (satu baris satu poin)' : 'Layanan (satu baris satu poin)', type: 'textarea', rows: 6 },
+    ...(isTefa ? [
+      { k: 'hours', label: 'Jam layanan', half: true, placeholder: 'mis. Senin–Jumat, 08.00–14.00 WIB' },
+      { k: 'address', label: 'Lokasi layanan', half: true, placeholder: 'mis. Gedung B lantai 1, Ruang TEFA Kuliner' },
+      { k: 'order_note', label: 'Catatan pemesanan (opsional)', type: 'textarea', rows: 2, placeholder: 'mis. Pesanan kue minimal H-2. Pembayaran tunai/transfer saat konfirmasi.' },
+    ] : []),
+    { k: 'kompetensi', label: isJur ? 'Kompetensi yang dipelajari (satu baris satu poin)' : isTefa ? 'Ringkasan layanan (opsional, satu baris satu poin)' : isWaka ? 'Tugas & fungsi (satu baris satu poin)' : 'Layanan (satu baris satu poin)', type: 'textarea', rows: 6 },
     ...(isJur ? [{ k: 'prospek', label: 'Prospek karier lulusan (satu baris satu poin)', type: 'textarea', rows: 5 }] : []),
   ];
   const side = [
@@ -566,9 +608,9 @@ V.units = async (view, slug) => {
     { k: 'head_name', label: isJur ? 'Nama Kaprog / Kakomli' : isTefa ? 'Nama manajer TEFA' : isWaka ? 'Nama wakil kepala sekolah' : 'Nama ketua / penanggung jawab' },
     { k: 'head_title', label: 'Jabatan' },
     { k: 'head_photo', label: 'Foto', type: 'logo' },
-    { k: 'phone', label: isTefa ? 'No. WhatsApp pemesanan' : 'No. WhatsApp', help: isTefa ? 'Akan muncul tombol "Pesan via WhatsApp" di halaman TEFA.' : '' }, { k: 'email', label: 'Email', type: 'email' }, { k: 'instagram', label: 'Instagram (tanpa @)' },
+    { k: 'phone', label: isTefa ? 'No. WhatsApp pemesanan' : 'No. WhatsApp', help: isTefa ? 'Pesanan dari tombol "Pesan via WhatsApp" dikirim ke nomor ini. Bila kosong, memakai nomor WhatsApp sekolah.' : '' }, { k: 'email', label: 'Email', type: 'email' }, { k: 'instagram', label: 'Instagram (tanpa @)' },
   ];
-  view.innerHTML = `<form id="f"><div class="form-grid"><div class="box"><div class="fields">${main.map((f) => fieldHtml(f, unit[f.k])).join('')}</div></div>
+  view.innerHTML = `${isTefa ? `<div class="notice info">Produk & layanan TEFA dikelola di menu <a href="#/product" style="font-weight:700">Katalog Produk & Layanan</a> (dengan foto, harga, dan tombol pesan WhatsApp). Isi juga <b>No. WhatsApp pemesanan</b>, <b>jam</b>, dan <b>lokasi layanan</b> di bawah ini.</div>` : ''}<form id="f"><div class="form-grid"><div class="box"><div class="fields">${main.map((f) => fieldHtml(f, unit[f.k])).join('')}</div></div>
     <div class="box"><div class="fields">${side.map((f) => fieldHtml(f, unit[f.k])).join('')}</div><div class="form-actions"><button class="btn btn-primary btn-block">Simpan profil</button></div></div></div></form>`;
   bindForm(view, [...main, ...side]);
   $('#f').onsubmit = async (e) => {
@@ -998,6 +1040,7 @@ async function route() {
     if (a === 'messages' && !isAdmin() && !isBkk()) throw new Error('Menu ini khusus admin, BKK, dan Waka Humas.');
     if (RES[a]) {
       if (a === 'program' && !isAdmin() && UNIT[ME.unit_slug]?.type !== 'waka') throw new Error('Menu ini khusus admin dan wakil kepala sekolah.');
+      if (a === 'product' && !isAdmin() && UNIT[ME.unit_slug]?.type !== 'tefa') throw new Error('Menu ini khusus admin dan pengelola TEFA.');
       if (a === 'lowongan' && !isAdmin() && !isBkk()) throw new Error('Menu ini khusus BKK dan Waka Humas.');
       if (a === 'skema' && !isAdmin() && ME.unit_slug !== 'lsp') throw new Error('Menu ini khusus LSP.');
       if (a === 'dudi' && !isAdmin() && !isBkk() && UNIT[ME.unit_slug]?.type !== 'jurusan') throw new Error('Menu ini khusus admin, BKK, Waka Humas, dan pengelola jurusan.');

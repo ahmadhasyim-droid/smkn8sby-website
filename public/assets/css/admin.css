@@ -210,3 +210,4 @@ td.act .btn + .btn { margin-left: 4px; }
 .vprev .vp.vertical { max-width: 260px; aspect-ratio: 9/16; }
 .vprev .vp.ig { max-width: 320px; aspect-ratio: auto; height: 560px; background: #fff; border: 1px solid var(--line); }
 .vprev iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.fields { align-items: start; }
