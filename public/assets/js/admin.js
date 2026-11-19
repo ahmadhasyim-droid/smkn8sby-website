@@ -411,7 +411,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 26</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 27</span>
       </div>
     </aside>
     <div class="main">
@@ -662,6 +662,12 @@ V.settings = async (view) => {
       { k: 'ig_token', label: 'Atau: Instagram access token (dari Meta Developer)', help: 'Opsional. Cara mendapatkannya ada di README bagian "Feed Instagram otomatis". Token diperpanjang otomatis oleh sistem dan tidak pernah ditampilkan ke pengunjung.' },
       { k: 'ig_posts', label: 'Atau: link postingan Instagram pilihan (satu per baris, maks. 6)', type: 'textarea', rows: 4, help: 'Dipakai bila token belum diisi. Contoh: https://www.instagram.com/p/XXXXXXXX/' },
     ]],
+    ['Profil Guru (keamanan)', [
+      { k: 'guru_profiles', label: 'Halaman Profil Guru di website', type: 'select', half: true, opts: () => [{ v: '1', l: 'Tampilkan' }, { v: '0', l: 'Sembunyikan semua' }],
+        help: 'Pilih "Sembunyikan semua" bila ada indikasi penipuan yang mencatut nama guru. Halaman /guru, semua profil, dan tautan khusus langsung tidak bisa dibuka. Guru tetap bisa mengisi profil & mengunduh CV PDF.' },
+      { k: 'guru_share', label: 'Tautan khusus untuk profil privat', type: 'select', half: true, opts: () => [{ v: '1', l: 'Izinkan guru membagikan' }, { v: '0', l: 'Matikan' }],
+        help: 'Guru dengan profil privat dapat membuat tautan rahasia berbatas waktu untuk orang tertentu. Bila dimatikan, semua tautan khusus berhenti berlaku.' },
+    ]],
     ['Notifikasi email pesan masuk', [
       { k: 'notif_email', label: 'Kirim salinan setiap pesan masuk ke email', type: 'text', placeholder: 'email@smkn8-sby.sch.id', help: 'Boleh lebih dari satu, pisahkan dengan koma (maks. 5). Kosongkan untuk mematikan.' },
       { k: 'notif_from', label: 'Alamat pengirim', type: 'text', placeholder: 'noreply@smkn8-sby.sch.id', help: 'Harus memakai domain yang sudah diverifikasi di Resend (lihat README bagian "Notifikasi email").' },
@@ -786,7 +792,7 @@ V.users = async (view) => {
 function profileCard(p) {
   const c = p?.completeness || 0, pub = p?.visibility === 'public' && !p?.hidden;
   return `<div class="box prof-card"><div class="pc-l"><span class="pc-ic">${ic('idcard')}</span><div><b>Profil / CV Saya</b>
-    <span>${!p ? 'Belum diisi. Lengkapi profil Anda: foto, pendidikan, keahlian & sertifikat kompetensi, prestasi.' : p.hidden ? 'Profil sedang disembunyikan oleh admin.' : pub ? 'Profil Anda <b>tampil di website</b>.' : 'Profil Anda masih <b>privat</b> (hanya Anda & admin yang bisa melihat).'}</span>
+    <span>${p && p.enabled === false ? 'Halaman Profil Guru sedang <b>disembunyikan admin</b>. Anda tetap bisa mengisi profil & mengunduh CV.' : !p ? 'Belum diisi. Lengkapi profil Anda: foto, pendidikan, keahlian & sertifikat kompetensi, prestasi.' : p.hidden ? 'Profil sedang disembunyikan oleh admin.' : pub ? 'Profil Anda <b>tampil di website</b>.' : 'Profil Anda masih <b>privat</b> (hanya Anda & admin yang bisa melihat).'}</span>
     <div class="meter"><i style="width:${c}%"></i></div><small>Kelengkapan ${c}%</small></div></div>
     <div class="pc-r"><a class="btn btn-primary btn-sm" href="#/profil">${ic('pen')}${p ? 'Perbarui profil' : 'Isi profil'}</a>${p ? `<a class="btn btn-line btn-sm" href="/guru/${encodeURIComponent(p.slug)}" target="_blank">${ic('eye')}Lihat</a><a class="btn btn-line btn-sm" href="#/cv">${ic('dl')}Download CV</a>` : ''}</div></div>`;
 }
@@ -876,12 +882,14 @@ V.profil = async (view) => {
   view.innerHTML = `<form id="pf" class="prof-form" novalidate>
     <div class="box vis-box">
       <div class="vis-opts">
-        <label class="vis-opt"><input type="radio" name="visibility" value="private"${p.visibility !== 'public' ? ' checked' : ''}><span>${ic('lock')}<b>Privat</b><small>Hanya Anda & admin yang dapat melihat. Cocok selama masih melengkapi.</small></span></label>
+        <label class="vis-opt"><input type="radio" name="visibility" value="private"${p.visibility !== 'public' ? ' checked' : ''}><span>${ic('lock')}<b>Privat</b><small>Tidak tampil di website. Hanya Anda, admin, dan orang yang Anda beri <b>tautan khusus</b> yang dapat melihat.</small></span></label>
         <label class="vis-opt"><input type="radio" name="visibility" value="public"${p.visibility === 'public' ? ' checked' : ''}><span>${ic('globe')}<b>Publik</b><small>Tampil di halaman <b>Profil Guru</b> website sekolah dan dapat dilihat siapa saja.</small></span></label>
       </div>
       <div class="vis-info"><div><span class="mono">Kelengkapan</span><div class="meter"><i id="cmp" style="width:${p.completeness}%"></i></div><small id="cmpT">${p.completeness}% lengkap</small></div>
         <div><span class="mono">Alamat profil</span><a href="${url()}" target="_blank" class="purl">smkn8-sby.sch.id${url()}</a></div>
         <div><span class="mono">Gambar bukti</span><small id="imgQ">${d.mediaCount ? Math.max(0, d.mediaCount - (p.photo ? 1 : 0)) : 0} dari ${d.maxImages} terpakai</small></div></div>
+      ${!d.flags.enabled ? `<div class="notice bad" style="margin:14px 0 0">Admin sekolah sedang <b>menyembunyikan halaman Profil Guru</b> demi keamanan. Profil Anda (termasuk tautan khusus) tidak dapat dibuka orang lain untuk sementara. Anda tetap bisa mengisi profil dan mengunduh CV PDF.</div>` : ''}
+      <div id="shareBox"></div>
       ${p.hidden ? `<div class="notice bad" style="margin:14px 0 0">Profil Anda sedang disembunyikan oleh admin, sehingga tidak tampil di website walaupun diatur Publik. Hubungi admin sekolah.</div>` : ''}
     </div>
     <div class="box"><h3>Data diri</h3><div class="prof-top">
@@ -896,6 +904,34 @@ V.profil = async (view) => {
   </form>`;
   const form = $('#pf');
   bindForm(form, [{ k: 'photo', type: 'logo', maxW: 500, tag: 'profil' }]);
+  // ----- bagikan tautan khusus (profil privat) -----
+  let share = d.share;
+  const shareUrl = () => `${location.origin}/guru/${encodeURIComponent(p.slug)}?k=${share.token}`;
+  const fmtExp = (iso) => new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
+  const drawShare = () => {
+    const box = $('#shareBox'), isPub = $('[name=visibility]:checked', form)?.value === 'public';
+    if (!d.flags.enabled) { box.innerHTML = ''; return; }
+    if (isPub) { box.innerHTML = `<div class="share-box muted">${ic('globe')}<span>Profil Anda <b>publik</b>. Untuk membagikan, cukup kirim alamat profil di atas.${share ? ' Tautan khusus lama tidak diperlukan lagi.' : ''}</span></div>`; return; }
+    if (!d.flags.share) { box.innerHTML = `<div class="share-box muted">${ic('lock')}<span>Fitur <b>bagikan tautan khusus</b> sedang dinonaktifkan admin sekolah.</span></div>`; return; }
+    box.innerHTML = `<div class="share-box"><div class="sb-head">${ic('ext')}<div><b>Bagikan profil privat ke orang tertentu</b><span>Buat tautan rahasia berbatas waktu, misalnya untuk panitia lomba, asesor, atau mitra industri. Orang lain yang tidak memegang tautan tetap tidak bisa membuka profil Anda.</span></div></div>
+      ${share ? `<div class="sb-link"><input readonly value="${esc(shareUrl())}" id="shareUrl" aria-label="Tautan khusus"><button type="button" class="btn btn-primary btn-sm" id="shCopy">Salin</button><a class="btn btn-line btn-sm" id="shWa" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Profil/CV saya — ' + p.full_name + ': ' + shareUrl())}">WhatsApp</a></div>
+        <div class="sb-meta"><span>Berlaku sampai <b>${fmtExp(share.expires)}</b> WIB</span><button type="button" class="link-btn" id="shRenew">Buat tautan baru</button><button type="button" class="link-btn bad" id="shRevoke">Cabut tautan</button></div>`
+      : `<div class="sb-link"><select id="shDays" aria-label="Masa berlaku"><option value="1">Berlaku 1 hari</option><option value="7" selected>Berlaku 7 hari</option><option value="30">Berlaku 30 hari</option><option value="90">Berlaku 90 hari</option></select><button type="button" class="btn btn-primary btn-sm" id="shMake">${ic('plus')}Buat tautan khusus</button></div>`}
+      <small class="sb-note">Siapa pun yang memegang tautan dapat melihat profil Anda sampai masa berlaku habis. Bagikan hanya ke orang yang Anda percaya, dan cabut bila sudah tidak diperlukan. Membuat tautan baru otomatis membatalkan tautan lama.</small></div>`;
+    const make = async (days) => {
+      if (dirty || p.visibility !== 'private') { if (!confirm('Simpan profil sebagai Privat terlebih dahulu?')) return; await save(); if (dirty) return; }
+      try { share = (await api('admin/profil/share', { method: 'POST', body: { days } })).share; drawShare(); toast('Tautan khusus dibuat. Salin lalu kirim ke orang yang dituju.'); } catch (e) { toast(e.message, true); }
+    };
+    $('#shMake') && ($('#shMake').onclick = () => make(+$('#shDays').value));
+    $('#shRenew') && ($('#shRenew').onclick = () => { if (confirm('Buat tautan baru? Tautan lama langsung tidak berlaku.')) make(7); });
+    $('#shRevoke') && ($('#shRevoke').onclick = async () => {
+      if (!confirm('Cabut tautan khusus? Orang yang sudah menerima tautan tidak bisa membukanya lagi.')) return;
+      try { await api('admin/profil/share', { method: 'POST', body: { action: 'revoke' } }); share = null; drawShare(); toast('Tautan khusus dicabut'); } catch (e) { toast(e.message, true); }
+    });
+    $('#shCopy') && ($('#shCopy').onclick = async () => { const i = $('#shareUrl'); i.select(); try { await navigator.clipboard.writeText(i.value); } catch { document.execCommand('copy'); } toast('Tautan disalin'); });
+  };
+  $$('[name=visibility]', form).forEach((r) => r.addEventListener('change', drawShare));
+  drawShare();
   const markDirty = () => { dirty = true; $('#dirtyT').textContent = 'Ada perubahan yang belum disimpan.'; $('#dirtyT').classList.add('warn'); };
   form.addEventListener('input', markDirty); form.addEventListener('change', markDirty);
   window.onbeforeunload = (e) => { if (dirty && location.hash.startsWith('#/profil')) { e.preventDefault(); e.returnValue = ''; } };
@@ -1121,10 +1157,11 @@ V.cv = async (view) => {
 
 V['profil-guru'] = async (view) => {
   setHead('Profil Guru', `<a class="btn btn-line" href="/guru" target="_blank">${ic('ext')}Halaman Profil Guru</a>`);
-  const { items } = await api('admin/profil-guru');
+  const { items, flags } = await api('admin/profil-guru');
   const st = (r) => (!r.slug ? ['Belum diisi', '#888'] : r.hidden ? ['Disembunyikan admin', '#d4364b'] : r.visibility === 'public' ? ['Publik', '#16966a'] : ['Privat', '#5a6474']);
   const n = { all: items.length, pub: items.filter((r) => r.slug && !r.hidden && r.visibility === 'public').length, none: items.filter((r) => !r.slug).length };
   view.innerHTML = `<div class="grid-stats">${[[n.all, 'Akun guru', '#235ba4'], [n.pub, 'Profil publik', '#16966a'], [n.all - n.pub - n.none, 'Privat / disembunyikan', '#5a6474'], [n.none, 'Belum mengisi', '#d98a06']].map(([v, l, c]) => `<div class="stat" style="--c:${c}"><b>${v}</b><span>${l}</span></div>`).join('')}</div>
+    <div class="notice ${flags.enabled ? 'info' : 'bad'}" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center"><span>${flags.enabled ? `${ic('globe')} Halaman Profil Guru <b>ditampilkan</b> di website. Tautan khusus profil privat: <b>${flags.share ? 'diizinkan' : 'dimatikan'}</b>.` : `${ic('lock')} Halaman Profil Guru sedang <b>disembunyikan</b> dari website (termasuk semua tautan khusus).`}</span><a class="btn btn-line btn-sm" href="#/settings">Ubah di Pengaturan Situs</a></div>
     <div class="notice info">Setiap guru mengisi profil/CV sendiri dari akunnya (menu <b>Profil / CV Saya</b>) dan memilih sendiri <b>Publik</b> atau <b>Privat</b>. Admin dapat <b>menyembunyikan</b> profil yang isinya tidak pantas.</div>
     <div class="toolbar"><div class="search">${ic('search')}<input id="q" placeholder="Cari nama guru…"></div>
       <select id="fs"><option value="">Semua status</option><option>Publik</option><option>Privat</option><option>Belum diisi</option><option>Disembunyikan admin</option></select></div>
@@ -1136,8 +1173,13 @@ V['profil-guru'] = async (view) => {
       <td><div class="who"><span class="av" style="${r.photo ? `background-image:url('${esc(r.photo)}')` : ''}">${r.photo ? '' : esc((r.full_name || r.name || r.username).replace(/^(Drs?|Dra|Ir|H|Hj)\.?\s+/i, '').split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase())}</span><span><span class="t-title">${esc(r.full_name || r.name || r.username)}</span><span class="t-sub">@${esc(r.username)}${r.position ? ' · ' + esc(r.position) : ''}${r.active ? '' : ' · akun nonaktif'}</span></span></div></td>
       <td>${r.unit_slug && UNIT[r.unit_slug] ? unitTag(r.unit_slug) : r.unit_slug === 'umum' ? '<span class="tag" style="--c:#5a6474">Umum</span>' : '-'}</td>
       <td style="min-width:120px">${r.slug ? `<div class="meter sm"><i style="width:${r.completeness}%"></i></div><span class="t-sub">${r.completeness}%</span>` : '-'}</td>
-      <td style="white-space:nowrap"><span class="tag" style="--c:${c}">${l}</span></td><td class="t-sub">${r.updated_at ? fmtDate(r.updated_at) : '-'}</td>
+      <td style="white-space:nowrap"><span class="tag" style="--c:${c}">${l}</span>${r.shared ? `<br><span class="tag" style="--c:#1d4ed8;margin-top:4px">Tautan khusus aktif</span> <button class="link-btn bad" data-unshare="${r.user_id}">Cabut</button>` : ''}</td><td class="t-sub">${r.updated_at ? fmtDate(r.updated_at) : '-'}</td>
       <td style="white-space:nowrap">${r.slug ? `<a class="btn btn-line btn-sm" href="/guru/${encodeURIComponent(r.slug)}" target="_blank">${ic('eye')}Lihat</a> <button class="btn btn-line btn-sm" data-pdf="${esc(r.slug)}">${ic('dl')}PDF</button> <button class="btn ${r.hidden ? 'btn-line' : 'btn-danger'} btn-sm" data-hide="${r.user_id}" data-v="${r.hidden ? 0 : 1}">${r.hidden ? 'Tampilkan lagi' : 'Sembunyikan'}</button>` : ''}</td></tr>`; }).join('') : '<tr><td colspan="6"><div class="empty">Tidak ada data.</div></td></tr>';
+    $$('[data-unshare]').forEach((b) => (b.onclick = async () => {
+      if (!confirm('Cabut tautan khusus milik guru ini? Tautan yang sudah dibagikan tidak bisa dibuka lagi.')) return;
+      try { await api(`admin/profil-guru/${b.dataset.unshare}`, { method: 'POST', body: { revokeShare: 1 } }); items.find((x) => String(x.user_id) === b.dataset.unshare).shared = false; draw(); toast('Tautan khusus dicabut'); }
+      catch (e) { toast(e.message, true); }
+    }));
     $$('[data-pdf]').forEach((b) => (b.onclick = async () => {
       try { const g = await api('guru/' + encodeURIComponent(b.dataset.pdf)); downloadCv(g.profile, {}, b); } catch (e) { toast(e.message, true); }
     }));

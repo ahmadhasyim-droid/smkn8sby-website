@@ -522,6 +522,13 @@ async function cleanProfileMedia(db, userId, keep, olderThan) {
   return del.length;
 }
 const PUBLIC_PROFILE = `p.visibility='public' AND p.hidden=0 AND u.active=1 AND u.role='guru'`;
+async function guruFlags(db) {
+  const r = (await db.prepare(`SELECT key,value FROM settings WHERE key IN ('guru_profiles','guru_share')`).all()).results;
+  const g = Object.fromEntries(r.map((x) => [x.key, x.value]));
+  return { enabled: g.guru_profiles !== '0', share: g.guru_profiles !== '0' && g.guru_share !== '0' };
+}
+const shareValid = (p, k) => !!(k && p.share_token && /^[a-f0-9]{32}$/.test(k) && k === p.share_token && (!p.share_expires || p.share_expires > now()));
+const shareInfo = (p) => (p.share_token && (!p.share_expires || p.share_expires > now()) ? { token: p.share_token, expires: p.share_expires || null, created: p.share_created } : null);
 
 async function handleSarpras(db, req, parts, method, user, body) {
   const [, kind, id] = parts;
@@ -832,7 +839,7 @@ export async function onRequest(ctx) {
         const guruPost = GURU_CATS.includes(post.category);
         const related = await db.prepare(`SELECT slug,title,cover,video_url,category,unit_slug,published_at FROM posts
           WHERE status='publish' AND id<>? AND ${guruPost ? `category IN ('opini','tips','artikel')` : 'unit_slug=?'} ORDER BY published_at DESC LIMIT 3`).bind(...(guruPost ? [post.id] : [post.id, post.unit_slug])).all();
-        if (guruPost && post.author_id) post.author_profile = await db.prepare(`SELECT p.slug FROM teacher_profiles p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND ${PUBLIC_PROFILE}`).bind(post.author_id).first('slug');
+        if (guruPost && post.author_id && (await guruFlags(db)).enabled) post.author_profile = await db.prepare(`SELECT p.slug FROM teacher_profiles p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND ${PUBLIC_PROFILE}`).bind(post.author_id).first('slug');
         delete post.review_note; delete post.reviewed_by; delete post.reviewed_at; delete post.submitted_at;
         return json({ post, related: related.results });
       }
@@ -944,7 +951,9 @@ export async function onRequest(ctx) {
 
     // ===== PROFIL GURU (publik) =====
     if (method === 'GET' && parts[0] === 'guru') {
+      const flags = await guruFlags(db);
       if (!parts[1]) {
+        if (!flags.enabled) return json({ disabled: true, items: [] }, 200, { 'Cache-Control': 'no-store' });
         // Semua akun guru aktif tampil. Isi profil (foto, bidang, keahlian) hanya dikirim untuk profil yang dipublikasikan;
         // profil privat cukup nama & jabatan dari akun (sudah tampil sebagai penulis artikel).
         const rows = (await db.prepare(`SELECT u.id,u.name,u.title,p.slug,p.full_name,p.position,p.unit_slug,p.subjects,p.photo,p.skills,
@@ -957,17 +966,20 @@ export async function onRequest(ctx) {
         return json({ items, publicCount: items.filter((x) => x.public).length }, 200, { 'Cache-Control': 'public, max-age=60' });
       }
       const p = await db.prepare(`SELECT p.*, u.active, u.role FROM teacher_profiles p JOIN users u ON u.id=p.user_id WHERE p.slug=?`).bind(parts[1]).first();
-      const pub = p && p.visibility === 'public' && !p.hidden && p.active && p.role === 'guru';
+      const okUser = p && !p.hidden && p.active && p.role === 'guru';
+      const pub = flags.enabled && okUser && p.visibility === 'public';
+      const shared = !pub && flags.share && okUser && shareValid(p, q.get('k')); // tautan khusus dari pemilik profil privat
       let preview = false;
-      if (p && !pub) { // pemilik profil & admin tetap dapat melihat pratinjau profil privat
+      if (p && !pub && !shared) { // pemilik profil & admin tetap dapat melihat pratinjau
         const me = await currentUser(db, req);
         preview = !!me && (me.id === p.user_id || me.role === 'admin');
       }
-      if (!p || (!pub && !preview)) return err('Profil guru tidak ditemukan atau belum dipublikasikan.', 404);
+      if (!p || (!pub && !shared && !preview)) return err(flags.enabled ? 'Profil guru tidak ditemukan, diprivat, atau tautannya sudah tidak berlaku.' : 'Halaman Profil Guru sedang tidak ditampilkan.', 404);
       const posts = await db.prepare(`SELECT slug,title,category,cover,published_at FROM posts WHERE author_id=? AND status='publish' ORDER BY published_at DESC LIMIT 6`).bind(p.user_id).all();
       const out = profileOut(p);
-      delete out.user_id; delete out.active; delete out.role; delete out.hidden;
-      return json({ profile: out, posts: posts.results, preview }, 200, { 'Cache-Control': preview ? 'no-store' : 'public, max-age=60' });
+      delete out.user_id; delete out.active; delete out.role; delete out.share_token; delete out.share_expires; delete out.share_created;
+      if (!preview) delete out.hidden;
+      return json({ profile: out, posts: posts.results, preview: preview && !pub, shared, enabled: flags.enabled }, 200, { 'Cache-Control': pub ? 'public, max-age=60' : 'no-store', ...(pub ? {} : { 'X-Robots-Tag': 'noindex' }) });
     }
 
     if (method === 'POST' && parts[0] === 'pesan') {
@@ -1072,7 +1084,7 @@ export async function onRequest(ctx) {
         const by = Object.fromEntries(rows.map((r) => [r.status, r.n]));
         const recent = await db.prepare(`SELECT id,slug,title,category,status,review_note,submitted_at,published_at,views FROM posts WHERE author_id=? ORDER BY COALESCE(updated_at,created_at) DESC LIMIT 6`).bind(user.id).all();
         const prof = await db.prepare(`SELECT slug,visibility,hidden,photo,full_name,position,bio,skills,data FROM teacher_profiles WHERE user_id=?`).bind(user.id).first();
-        const profile = prof ? { slug: prof.slug, visibility: prof.visibility, hidden: prof.hidden, completeness: completeness(prof) } : null;
+        const profile = prof ? { slug: prof.slug, visibility: prof.visibility, hidden: prof.hidden, completeness: completeness(prof), enabled: (await guruFlags(db)).enabled } : null;
         return json({ guru: true, profile, draft: by.draft || 0, review: by.review || 0, ditolak: by.ditolak || 0, publish: by.publish || 0, views: rows.reduce((a, r) => a + r.v, 0), recent: recent.results });
       }
       const scope = isAdmin ? '' : ' WHERE unit_slug=?';
@@ -1226,7 +1238,21 @@ export async function onRequest(ctx) {
       const cur = await ensureProfile(db, user);
       if (method === 'GET') {
         const imgs = (await db.prepare(`SELECT COUNT(*) n FROM media WHERE created_by=? AND unit_slug=?`).bind(user.id, PROFILE_MEDIA_TAG).first('n'));
-        return json({ profile: { ...profileOut(cur), completeness: completeness(cur) }, maxImages: MAX_PROFILE_IMAGES, mediaCount: imgs });
+        const out = profileOut(cur); delete out.share_token; delete out.share_expires; delete out.share_created;
+        return json({ profile: { ...out, completeness: completeness(cur) }, maxImages: MAX_PROFILE_IMAGES, mediaCount: imgs, share: shareInfo(cur), flags: await guruFlags(db) });
+      }
+      // Tautan khusus untuk membagikan profil privat ke orang tertentu
+      if (parts[2] === 'share' && method === 'POST') {
+        const b = await body();
+        if (b.action === 'revoke') {
+          await db.prepare(`UPDATE teacher_profiles SET share_token=NULL, share_expires=NULL, share_created=NULL WHERE user_id=?`).bind(user.id).run();
+          return json({ ok: true, share: null });
+        }
+        if (!(await guruFlags(db)).share) return err('Fitur bagikan tautan profil sedang dinonaktifkan admin sekolah.', 403);
+        const days = [1, 7, 30, 90].includes(Number(b.days)) ? Number(b.days) : 7;
+        const token = randHex(16), exp = new Date(Date.now() + days * 864e5).toISOString();
+        await db.prepare(`UPDATE teacher_profiles SET share_token=?, share_expires=?, share_created=? WHERE user_id=?`).bind(token, exp, now(), user.id).run();
+        return json({ ok: true, share: { token, expires: exp, created: now() } });
       }
       if (method === 'PUT') {
         const p = cleanProfile(await body());
@@ -1243,7 +1269,8 @@ export async function onRequest(ctx) {
           .bind(p.full_name, p.position, p.unit_slug, p.subjects, p.bio, p.skills, p.email, p.photo, p.visibility, p.links, p.data, now(), pubAt, user.id).run();
         const removed = await cleanProfileMedia(db, user.id, used);
         const saved = await db.prepare(`SELECT * FROM teacher_profiles WHERE user_id=?`).bind(user.id).first();
-        return json({ ok: true, removed, profile: { ...profileOut(saved), completeness: completeness(saved) } });
+        const out = profileOut(saved); delete out.share_token; delete out.share_expires; delete out.share_created;
+        return json({ ok: true, removed, profile: { ...out, completeness: completeness(saved) } });
       }
     }
 
@@ -1252,12 +1279,13 @@ export async function onRequest(ctx) {
       if (!isAdmin) return err('Khusus admin.', 403);
       if (method === 'GET') {
         const rows = await db.prepare(`SELECT u.id user_id,u.username,u.name,u.title,u.active,p.slug,p.full_name,p.position,p.unit_slug,p.photo,p.visibility,p.hidden,p.updated_at,p.data,p.bio,p.skills
-          FROM users u LEFT JOIN teacher_profiles p ON p.user_id=u.id WHERE u.role='guru' ORDER BY COALESCE(p.full_name,u.name,u.username) COLLATE NOCASE`).all();
-        return json({ items: rows.results.map((r) => { const c = r.slug ? completeness(r) : 0; delete r.data; delete r.bio; delete r.skills; return { ...r, completeness: c }; }) });
+          ,p.share_token,p.share_expires FROM users u LEFT JOIN teacher_profiles p ON p.user_id=u.id WHERE u.role='guru' ORDER BY COALESCE(p.full_name,u.name,u.username) COLLATE NOCASE`).all();
+        return json({ flags: await guruFlags(db), items: rows.results.map((r) => { const c = r.slug ? completeness(r) : 0; const shared = !!shareInfo(r); delete r.data; delete r.bio; delete r.skills; delete r.share_token; delete r.share_expires; return { ...r, completeness: c, shared }; }) });
       }
       const uid = clampInt(parts[2], 0, 0, 1e12);
       if (method === 'POST' && uid) {
         const b = await body();
+        if (b.revokeShare) { await db.prepare(`UPDATE teacher_profiles SET share_token=NULL, share_expires=NULL, share_created=NULL WHERE user_id=?`).bind(uid).run(); return json({ ok: true }); }
         await db.prepare(`UPDATE teacher_profiles SET hidden=? WHERE user_id=?`).bind(b.hidden ? 1 : 0, uid).run();
         return json({ ok: true });
       }

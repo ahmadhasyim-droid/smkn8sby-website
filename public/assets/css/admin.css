@@ -273,3 +273,17 @@ td.act .btn + .btn { margin-left: 4px; }
 .cv-ic { width: 46px; height: 46px; border-radius: 10px; background: #fdeee7; color: #d9481f; display: grid; place-items: center; flex: none; }
 .cv-ic .ico { width: 24px; height: 24px; }
 .field .inline small { color: var(--muted); font-weight: 500; }
+.share-box { margin-top: 14px; border: 1px solid #c6dbf5; background: #f4f8fe; border-radius: 10px; padding: 16px; display: grid; gap: 12px; }
+.share-box.muted { display: flex; gap: 10px; align-items: center; border-color: var(--line); background: #f8f9fb; padding: 12px 14px; font-size: .88rem; color: var(--muted); }
+.share-box .ico { width: 20px; height: 20px; flex: none; color: #1d4ed8; }
+.share-box.muted .ico { color: var(--muted); }
+.sb-head { display: flex; gap: 10px; align-items: flex-start; }
+.sb-head > div { display: grid; gap: 2px; }
+.sb-head span { font-size: .85rem; color: var(--muted); line-height: 1.5; }
+.sb-link { display: flex; gap: 8px; flex-wrap: wrap; }
+.sb-link input, .sb-link select { flex: 1; min-width: 200px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; font: inherit; font-size: .86rem; }
+.sb-link select { flex: 0 1 220px; }
+.sb-meta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: .84rem; }
+.sb-note { font-size: .78rem; color: var(--muted); line-height: 1.5; }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; font-size: .82rem; font-weight: 700; color: var(--blue); cursor: pointer; text-decoration: underline; }
+.link-btn.bad { color: var(--bad); }

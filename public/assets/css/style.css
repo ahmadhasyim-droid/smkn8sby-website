@@ -909,3 +909,10 @@ select.chip-btn { appearance: auto; padding-right: 10px; }
 .guru-card.is-private b { color: #3b4657; }
 .gc-lock { margin-top: auto; padding-top: 10px; display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 700; color: #64748b; }
 .gc-lock .ico { width: 14px; height: 14px; }
+.gp-preview.shared { background: #eaf3ff; border-color: #c6dbf5; color: #1d4677; }
+.gp-warn { display: flex; gap: 14px; align-items: flex-start; background: #fff8eb; border: 1px solid #f3d9a4; border-left: 4px solid #d98a06; border-radius: 8px; padding: 16px 18px; color: #6b4300; }
+.gp-warn .ico { width: 22px; height: 22px; flex: none; color: #b26f00; }
+.gp-warn > div { display: grid; gap: 4px; font-size: .92rem; line-height: 1.5; }
+.gp-warn a { font-weight: 700; text-decoration: underline; }
+.gp-warn.sm { padding: 14px; margin-bottom: 14px; }
+.gp-warn.sm > div { font-size: .82rem; }

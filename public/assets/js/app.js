@@ -215,7 +215,7 @@ function renderShell() {
         ${ddLink('/profil', 'Profil Sekolah', 'Sambutan, sejarah, visi & misi', 'sekolah', '#235ba4')}
         ${s.profile_video ? ddLink('/profil#video', 'Video Profil', 'Kenali SMKN 8 Surabaya lewat video', 'play', '#f26836') : ''}
         ${ddLink('/program', 'Program Sekolah', 'Program kerja wakil kepala sekolah', 'clipboard', '#1d4ed8')}
-        ${ddLink('/guru', 'Profil Guru', 'Kenali guru, keahlian & sertifikasinya', 'idcard', '#0f766e')}
+        ${s.guru_profiles !== '0' ? ddLink('/guru', 'Profil Guru', 'Kenali guru, keahlian & sertifikasinya', 'idcard', '#0f766e') : ''}
         ${ddLink('/perpustakaan', 'Perpustakaan', 'Profil & layanan perpustakaan', 'book', '#16966a')}
         ${ddLink('/dudi', 'DUDI / Mitra Industri', 'Industri yang bekerja sama', 'handshake', '#7c4bc4')}
       </div></div>
@@ -1172,7 +1172,13 @@ async function guruDirectory(main) {
     <div class="filters" style="margin-top:-12px"><label class="search" style="margin-left:0">${icon('search')}<input id="q" type="search" placeholder="Cari nama, mapel, atau keahlian…" aria-label="Cari guru"></label><span id="gCount" class="mono" style="color:var(--muted)"></span></div>
     <div class="guru-grid" id="gList"><div class="empty">Memuat…</div></div>
   </div></section>`;
-  const { items } = await api('guru');
+  const res = await api('guru');
+  if (res.disabled) {
+    main.innerHTML = `${pageHero('Profil Guru', 'Halaman ini sedang tidak ditampilkan oleh admin sekolah.', ['Profil', 'Guru'])}
+    <section class="section"><div class="wrap"><div class="gp-warn">${icon('lock')}<div><b>Profil guru sedang disembunyikan.</b><span>Untuk keperluan resmi, silakan menghubungi sekolah melalui <a href="/kontak">halaman Kontak</a>.</span></div></div></div></section>`;
+    return;
+  }
+  const { items } = res;
   const count = (v) => (v === 'publik' ? items.filter((g) => g.public).length : items.filter((g) => g.public && g.unit_slug === v).length);
   $('#fBid').innerHTML = [['', 'Semua guru', '#0d1a2e'], ['publik', 'Profil terbuka', '#16966a'], ...jur.map((u) => [u.slug, u.name, u.color]), ['umum', 'Mapel Umum / Adaptif', '#475569']]
     .map(([v, l, c]) => `<button class="chip-btn${v === bid ? ' on' : ''}" data-v="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)} <small>${v ? count(v) : items.length}</small></button>`).join('');
@@ -1198,15 +1204,18 @@ async function guruDirectory(main) {
 }
 async function guruProfile(main, slug) {
   let d;
-  try { d = await api('guru/' + encodeURIComponent(slug)); }
+  const key = params.get('k') || '';
+  const noindex = () => { const m = document.createElement('meta'); m.name = 'robots'; m.content = 'noindex, nofollow'; document.head.appendChild(m); };
+  try { d = await api('guru/' + encodeURIComponent(slug) + (key ? '?k=' + encodeURIComponent(key) : '')); }
   catch (e) {
-    setTitle('Profil guru');
+    noindex(); setTitle('Profil guru');
     main.innerHTML = `${pageHero('Profil diprivat', 'Profil guru ini belum dipublikasikan oleh pemiliknya, atau alamatnya tidak ditemukan.', ['Profil Guru'])}
     <section class="section"><div class="wrap"><a class="btn btn-dark" href="/guru">Lihat semua profil guru ${icon('arrow')}</a></div></section>`;
     return;
   }
   const g = d.profile, cv = g.data || {}, b = guruBidang(g.unit_slug), c = b?.color || '#0f766e';
   setTitle(g.full_name);
+  if (d.shared || d.preview) noindex();
   const sk = String(g.skills || '').split(',').map((x) => x.trim()).filter(Boolean);
   const L = g.links || {};
   const linkBtn = (u, ic, l) => (u ? `<a class="gp-link" href="${esc(safeUrl(u))}" target="_blank" rel="noopener" title="${l}">${icon(ic)}<span>${l}</span></a>` : '');
@@ -1215,7 +1224,7 @@ async function guruProfile(main, slug) {
   const proof = (it) => `${it.gambar ? `<a class="gp-thumb" href="${esc(it.gambar)}" target="_blank" rel="noopener"><img src="${esc(it.gambar)}" alt="Bukti: ${esc(it.nama || it.judul)}" loading="lazy"></a>` : ''}`;
   const proofLink = (it) => (it.link ? `<a class="gp-proof" href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener">${icon('link')}Lihat bukti</a>` : '');
   const counts = [['kompetensi', 'Sertifikat'], ['prestasi', 'Prestasi'], ['pelatihan', 'Pelatihan'], ['karya', 'Karya']].map(([k, l]) => [(cv[k] || []).length, l]).filter(([n]) => n);
-  main.innerHTML = `${d.preview ? `<div class="gp-preview no-print"><div class="wrap">${icon('lock')}<span><b>Pratinjau.</b> ${g.hidden ? 'Profil ini sedang disembunyikan admin.' : g.visibility === 'public' ? 'Profil ini publik.' : 'Profil ini masih <b>PRIVAT</b> — hanya Anda dan admin yang dapat melihatnya. Ubah ke Publik di panel agar tampil di website.'}</span><a href="/admin/#/profil">Edit profil</a></div></div>` : ''}
+  main.innerHTML = `${d.shared ? `<div class="gp-preview shared no-print"><div class="wrap">${icon('link')}<span><b>Tautan khusus.</b> Anda melihat profil privat yang dibagikan langsung oleh pemiliknya. Mohon tidak menyebarluaskan tautan ini.</span></div></div>` : ''}${d.preview ? `<div class="gp-preview no-print"><div class="wrap">${icon('lock')}<span><b>Pratinjau.</b> ${g.hidden ? 'Profil ini sedang disembunyikan admin.' : !d.enabled ? 'Halaman Profil Guru sedang <b>disembunyikan admin</b>, jadi profil ini tidak tampil untuk umum.' : 'Profil ini masih <b>PRIVAT</b> — hanya Anda, admin, dan orang yang Anda beri tautan khusus yang dapat melihatnya.'}</span><a href="/admin/#/profil">Edit profil</a></div></div>` : ''}
   <section class="gp-hero" style="--c:${c}"><div class="wrap">
     <nav class="crumbs mono no-print" aria-label="Breadcrumb"><a href="/">Beranda</a><span><a href="/guru">Profil Guru</a></span><span>${esc(g.full_name)}</span></nav>
     <div class="gp-head">${guruAvatar(g, 'xl')}
@@ -1247,6 +1256,7 @@ async function guruProfile(main, slug) {
       ${(cv.organisasi || []).length ? `<div class="side-card"><h4>Organisasi & kepanitiaan</h4><ul class="gp-list sm">${cv.organisasi.map((it) => `<li><b>${esc(it.nama)}</b><span>${[it.peran, it.tahun].filter(Boolean).map(esc).join(' · ')}</span></li>`).join('')}</ul></div>` : ''}
       ${d.posts.length ? `<div class="side-card no-print"><h4>Tulisan di website</h4><div class="gp-posts">${d.posts.map((r) => `<a href="/berita/${encodeURIComponent(r.slug)}"><small class="mono">${esc(CATS[r.category] || '')}</small><b>${esc(r.title)}</b><span>${fmtDate(r.published_at)}</span></a>`).join('')}</div></div>` : ''}
       <div class="side-card no-print"><h4>Profil guru lainnya</h4><a class="btn btn-dark btn-sm" href="/guru${b ? '?bidang=' + encodeURIComponent(g.unit_slug) : ''}">${b ? 'Guru ' + esc(b.short || b.name) : 'Semua guru'} ${icon('arrow')}</a></div>
+      <div class="gp-warn sm">${icon('wmm')}<div><b>Waspada penipuan</b><span>Guru dan SMK Negeri 8 Surabaya <b>tidak pernah</b> meminta transfer uang, pulsa, atau data pribadi melalui profil ini. Ragu? Konfirmasi ke <a href="/kontak">kontak resmi sekolah</a>.</span></div></div>
       <p class="gp-updated mono">Diperbarui ${fmtDate(g.updated_at)}</p>
     </aside>
   </div></section>`;
