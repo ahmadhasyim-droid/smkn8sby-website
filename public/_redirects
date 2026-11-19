@@ -6,3 +6,4 @@
 /tefa            /toko     200
 /tefa/:slug      /unit     200
 /waka/:slug      /unit     200
+/guru/:slug      /guru     200

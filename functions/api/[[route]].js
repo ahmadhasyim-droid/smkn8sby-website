@@ -8,6 +8,7 @@ import { SARPRAS_ASSETS, SARPRAS_LOCATIONS, SARPRAS_ANNOUNCEMENT, SARPRAS_TEMPLA
 import { DUDI_SEED } from '../../lib/dudi-seed.js';
 import { PRESTASI_SEED } from '../../lib/prestasi-seed.js';
 import { LOWONGAN_SEED } from '../../lib/lowongan-seed.js';
+import { cleanProfile, profileImages, completeness, MAX_PROFILE_IMAGES, PROFILE_MEDIA_TAG } from '../../lib/guru-profile.js';
 const JURUSAN = new Set(DEFAULT_UNITS.filter((u) => u.type === 'jurusan').map((u) => u.slug));
 
 const SESSION_DAYS = 7;
@@ -297,7 +298,7 @@ async function sendNotif(env, db, m, test = false) {
 // ---------------- BACKUP & PEMULIHAN ----------------
 // Tabel yang dicadangkan (sesi login, percobaan login, dan cache feed tidak perlu)
 const BACKUP_SKIP = new Set(['sessions', 'login_attempts', 'cache', 'backup_log']);
-const BACKUP_ORDER = ['settings', 'units', 'users', 'posts', 'agenda', 'gallery', 'programs', 'prestasi', 'lowongan', 'skema', 'dudi', 'messages', 'sarpras_meta', 'sarpras_assets', 'sarpras_bast', 'media'];
+const BACKUP_ORDER = ['settings', 'units', 'users', 'posts', 'agenda', 'gallery', 'programs', 'prestasi', 'lowongan', 'skema', 'dudi', 'messages', 'sarpras_meta', 'sarpras_assets', 'sarpras_bast', 'teacher_profiles', 'media'];
 async function backupTables(db) {
   const rows = (await db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'`).all()).results.map((r) => r.name);
   const ok = rows.filter((n) => !BACKUP_SKIP.has(n) && /^[a-z_]+$/.test(n));
@@ -501,6 +502,27 @@ async function sarprasSync(db, step, user, opts = {}) {
   stat.photosLeft = await db.prepare(`SELECT COUNT(*) n FROM sarpras_assets WHERE photo LIKE 'https://lh3.googleusercontent.com/d/%'`).first('n');
   return stat;
 }
+// ---------------- Profil / CV guru ----------------
+const parseJ = (v, d) => { try { return JSON.parse(v || '') ?? d; } catch { return d; } };
+const profileOut = (p) => p && ({ ...p, links: parseJ(p.links, {}), data: parseJ(p.data, {}) });
+async function ensureProfile(db, user) {
+  let p = await db.prepare(`SELECT * FROM teacher_profiles WHERE user_id=?`).bind(user.id).first();
+  if (p) return p;
+  let base = (user.username || 'guru').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'guru', slug = base, n = 1;
+  while (await db.prepare(`SELECT 1 FROM teacher_profiles WHERE slug=?`).bind(slug).first()) slug = `${base}-${++n}`;
+  await db.prepare(`INSERT INTO teacher_profiles(user_id,slug,visibility,full_name,position,data,links,created_at,updated_at) VALUES(?,?,'private',?,?,'{}','{}',?,?)`)
+    .bind(user.id, slug, user.name || user.username, user.title || null, now(), now()).run();
+  return db.prepare(`SELECT * FROM teacher_profiles WHERE user_id=?`).bind(user.id).first();
+}
+// Hapus gambar profil milik guru yang sudah tidak dipakai lagi
+async function cleanProfileMedia(db, userId, keep, olderThan) {
+  const rows = (await db.prepare(`SELECT id FROM media WHERE created_by=? AND unit_slug=?${olderThan ? ' AND created_at<?' : ''}`).bind(userId, PROFILE_MEDIA_TAG, ...(olderThan ? [olderThan] : [])).all()).results;
+  const del = rows.filter((r) => !keep.has(`/api/media/${r.id}`)).map((r) => db.prepare(`DELETE FROM media WHERE id=?`).bind(r.id));
+  if (del.length) await db.batch(del);
+  return del.length;
+}
+const PUBLIC_PROFILE = `p.visibility='public' AND p.hidden=0 AND u.active=1 AND u.role='guru'`;
+
 async function handleSarpras(db, req, parts, method, user, body) {
   const [, kind, id] = parts;
   if (!canSarpras(user)) return err('Menu SI-SARPRAS khusus Waka Sarpras dan admin.', 403);
@@ -810,6 +832,7 @@ export async function onRequest(ctx) {
         const guruPost = GURU_CATS.includes(post.category);
         const related = await db.prepare(`SELECT slug,title,cover,video_url,category,unit_slug,published_at FROM posts
           WHERE status='publish' AND id<>? AND ${guruPost ? `category IN ('opini','tips','artikel')` : 'unit_slug=?'} ORDER BY published_at DESC LIMIT 3`).bind(...(guruPost ? [post.id] : [post.id, post.unit_slug])).all();
+        if (guruPost && post.author_id) post.author_profile = await db.prepare(`SELECT p.slug FROM teacher_profiles p JOIN users u ON u.id=p.user_id WHERE p.user_id=? AND ${PUBLIC_PROFILE}`).bind(post.author_id).first('slug');
         delete post.review_note; delete post.reviewed_by; delete post.reviewed_at; delete post.submitted_at;
         return json({ post, related: related.results });
       }
@@ -919,6 +942,27 @@ export async function onRequest(ctx) {
       return json({ items: rows.results });
     }
 
+    // ===== PROFIL GURU (publik) =====
+    if (method === 'GET' && parts[0] === 'guru') {
+      if (!parts[1]) {
+        const rows = await db.prepare(`SELECT p.slug,p.full_name,p.position,p.unit_slug,p.subjects,p.photo,p.skills FROM teacher_profiles p JOIN users u ON u.id=p.user_id
+          WHERE ${PUBLIC_PROFILE} ORDER BY p.full_name COLLATE NOCASE`).all();
+        return json({ items: rows.results }, 200, { 'Cache-Control': 'public, max-age=60' });
+      }
+      const p = await db.prepare(`SELECT p.*, u.active, u.role FROM teacher_profiles p JOIN users u ON u.id=p.user_id WHERE p.slug=?`).bind(parts[1]).first();
+      const pub = p && p.visibility === 'public' && !p.hidden && p.active && p.role === 'guru';
+      let preview = false;
+      if (p && !pub) { // pemilik profil & admin tetap dapat melihat pratinjau profil privat
+        const me = await currentUser(db, req);
+        preview = !!me && (me.id === p.user_id || me.role === 'admin');
+      }
+      if (!p || (!pub && !preview)) return err('Profil guru tidak ditemukan atau belum dipublikasikan.', 404);
+      const posts = await db.prepare(`SELECT slug,title,category,cover,published_at FROM posts WHERE author_id=? AND status='publish' ORDER BY published_at DESC LIMIT 6`).bind(p.user_id).all();
+      const out = profileOut(p);
+      delete out.user_id; delete out.active; delete out.role; delete out.hidden;
+      return json({ profile: out, posts: posts.results, preview }, 200, { 'Cache-Control': preview ? 'no-store' : 'public, max-age=60' });
+    }
+
     if (method === 'POST' && parts[0] === 'pesan') {
       const b = await body();
       if (b.website) return json({ ok: true }); // honeypot anti-spam
@@ -993,9 +1037,20 @@ export async function onRequest(ctx) {
       if (!/^image\/(jpeg|png|webp|gif)$/.test(mime) && !(mime === 'application/pdf' && canSarpras(user))) return err('Format gambar harus JPG, PNG, WEBP, atau GIF.');
       const buf = await req.arrayBuffer();
       if (buf.byteLength > MAX_MEDIA_BYTES) return err('Ukuran gambar terlalu besar (maks ±1,9 MB setelah dikompres).');
+      const forProfile = q.get('for') === 'profil' && isGuru(user);
+      if (forProfile) { // batas gambar profil guru (foto + bukti); gambar yang tidak terpakai dibersihkan dulu
+        const p = await db.prepare(`SELECT photo,data FROM teacher_profiles WHERE user_id=?`).bind(user.id).first();
+        const n = await db.prepare(`SELECT COUNT(*) n FROM media WHERE created_by=? AND unit_slug=?`).bind(user.id, PROFILE_MEDIA_TAG).first('n');
+        if (n >= MAX_PROFILE_IMAGES + 1) {
+          // hanya gambar lama (>12 jam) yang tidak dipakai; gambar yang baru diunggah tapi belum disimpan tetap aman
+          await cleanProfileMedia(db, user.id, profileImages(p), new Date(Date.now() - 12 * 3600e3).toISOString());
+          const n2 = await db.prepare(`SELECT COUNT(*) n FROM media WHERE created_by=? AND unit_slug=?`).bind(user.id, PROFILE_MEDIA_TAG).first('n');
+          if (n2 >= MAX_PROFILE_IMAGES + 1) return err(`Batas gambar profil sudah tercapai (foto profil + ${MAX_PROFILE_IMAGES} gambar bukti). Hapus gambar yang tidak perlu, simpan profil, lalu coba lagi — atau gunakan tautan bukti (Google Drive, dll).`);
+        }
+      }
       const id = randHex(12);
       await db.prepare(`INSERT INTO media(id,mime,data,size,unit_slug,created_by,created_at) VALUES(?,?,?,?,?,?,?)`)
-        .bind(id, mime, buf, buf.byteLength, user.unit_slug || 'sekolah', user.id, now()).run();
+        .bind(id, mime, buf, buf.byteLength, forProfile ? PROFILE_MEDIA_TAG : user.unit_slug || 'sekolah', user.id, now()).run();
       return json({ ok: true, url: `/api/media/${id}` });
     }
 
@@ -1009,7 +1064,9 @@ export async function onRequest(ctx) {
         const rows = (await db.prepare(`SELECT status, COUNT(*) n, COALESCE(SUM(views),0) v FROM posts WHERE author_id=? GROUP BY status`).bind(user.id).all()).results;
         const by = Object.fromEntries(rows.map((r) => [r.status, r.n]));
         const recent = await db.prepare(`SELECT id,slug,title,category,status,review_note,submitted_at,published_at,views FROM posts WHERE author_id=? ORDER BY COALESCE(updated_at,created_at) DESC LIMIT 6`).bind(user.id).all();
-        return json({ guru: true, draft: by.draft || 0, review: by.review || 0, ditolak: by.ditolak || 0, publish: by.publish || 0, views: rows.reduce((a, r) => a + r.v, 0), recent: recent.results });
+        const prof = await db.prepare(`SELECT slug,visibility,hidden,photo,full_name,position,bio,skills,data FROM teacher_profiles WHERE user_id=?`).bind(user.id).first();
+        const profile = prof ? { slug: prof.slug, visibility: prof.visibility, hidden: prof.hidden, completeness: completeness(prof) } : null;
+        return json({ guru: true, profile, draft: by.draft || 0, review: by.review || 0, ditolak: by.ditolak || 0, publish: by.publish || 0, views: rows.reduce((a, r) => a + r.v, 0), recent: recent.results });
       }
       const scope = isAdmin ? '' : ' WHERE unit_slug=?';
       const a = isAdmin ? [] : [user.unit_slug];
@@ -1098,6 +1155,12 @@ export async function onRequest(ctx) {
         const rows = await db.prepare(`SELECT id,username,name,title,role,unit_slug,active,created_at,last_login FROM users ORDER BY role, unit_slug, name, username`).all();
         return json({ items: rows.results });
       }
+      if (method === 'DELETE' && id) {
+        if (id === user.id) return err('Anda tidak dapat menghapus akun sendiri.');
+        await db.batch([db.prepare(`DELETE FROM sessions WHERE user_id=?`).bind(id), db.prepare(`DELETE FROM users WHERE id=?`).bind(id),
+          db.prepare(`DELETE FROM teacher_profiles WHERE user_id=?`).bind(id), db.prepare(`DELETE FROM media WHERE created_by=? AND unit_slug=?`).bind(id, PROFILE_MEDIA_TAG)]);
+        return json({ ok: true });
+      }
       const b = await body();
       // Tambah banyak akun guru sekaligus
       if (parts[2] === 'bulk' && method === 'POST') {
@@ -1148,9 +1211,47 @@ export async function onRequest(ctx) {
         if (!b.active) await db.prepare(`DELETE FROM sessions WHERE user_id=?`).bind(id).run();
         return json({ ok: true });
       }
-      if (method === 'DELETE' && id) {
-        if (id === user.id) return err('Anda tidak dapat menghapus akun sendiri.');
-        await db.batch([db.prepare(`DELETE FROM sessions WHERE user_id=?`).bind(id), db.prepare(`DELETE FROM users WHERE id=?`).bind(id)]);
+    }
+
+    // Profil / CV milik guru yang sedang login
+    if (area === 'profil') {
+      if (!isGuru(user)) return err('Profil/CV hanya untuk akun guru.', 403);
+      const cur = await ensureProfile(db, user);
+      if (method === 'GET') {
+        const imgs = (await db.prepare(`SELECT COUNT(*) n FROM media WHERE created_by=? AND unit_slug=?`).bind(user.id, PROFILE_MEDIA_TAG).first('n'));
+        return json({ profile: { ...profileOut(cur), completeness: completeness(cur) }, maxImages: MAX_PROFILE_IMAGES, mediaCount: imgs });
+      }
+      if (method === 'PUT') {
+        const p = cleanProfile(await body());
+        if (!p.full_name) return err('Nama lengkap wajib diisi.');
+        const used = profileImages(p);
+        if (used.size - (p.photo ? 1 : 0) > MAX_PROFILE_IMAGES) return err(`Maksimal ${MAX_PROFILE_IMAGES} gambar bukti per profil. Gunakan tautan untuk bukti lainnya.`);
+        // gambar hanya boleh milik guru ini sendiri
+        for (const u of used) {
+          const own = await db.prepare(`SELECT created_by FROM media WHERE id=?`).bind(u.split('/').pop()).first('created_by');
+          if (own !== user.id) return err('Ada gambar yang tidak valid. Silakan unggah ulang gambar tersebut.');
+        }
+        const pubAt = p.visibility === 'public' ? (cur.published_at || now()) : cur.published_at;
+        await db.prepare(`UPDATE teacher_profiles SET full_name=?,position=?,unit_slug=?,subjects=?,bio=?,skills=?,email=?,photo=?,visibility=?,links=?,data=?,updated_at=?,published_at=? WHERE user_id=?`)
+          .bind(p.full_name, p.position, p.unit_slug, p.subjects, p.bio, p.skills, p.email, p.photo, p.visibility, p.links, p.data, now(), pubAt, user.id).run();
+        const removed = await cleanProfileMedia(db, user.id, used);
+        const saved = await db.prepare(`SELECT * FROM teacher_profiles WHERE user_id=?`).bind(user.id).first();
+        return json({ ok: true, removed, profile: { ...profileOut(saved), completeness: completeness(saved) } });
+      }
+    }
+
+    // Admin: daftar semua profil guru + sembunyikan profil yang tidak pantas
+    if (area === 'profil-guru') {
+      if (!isAdmin) return err('Khusus admin.', 403);
+      if (method === 'GET') {
+        const rows = await db.prepare(`SELECT u.id user_id,u.username,u.name,u.title,u.active,p.slug,p.full_name,p.position,p.unit_slug,p.photo,p.visibility,p.hidden,p.updated_at,p.data,p.bio,p.skills
+          FROM users u LEFT JOIN teacher_profiles p ON p.user_id=u.id WHERE u.role='guru' ORDER BY COALESCE(p.full_name,u.name,u.username) COLLATE NOCASE`).all();
+        return json({ items: rows.results.map((r) => { const c = r.slug ? completeness(r) : 0; delete r.data; delete r.bio; delete r.skills; return { ...r, completeness: c }; }) });
+      }
+      const uid = clampInt(parts[2], 0, 0, 1e12);
+      if (method === 'POST' && uid) {
+        const b = await body();
+        await db.prepare(`UPDATE teacher_profiles SET hidden=? WHERE user_id=?`).bind(b.hidden ? 1 : 0, uid).run();
         return json({ ok: true });
       }
     }

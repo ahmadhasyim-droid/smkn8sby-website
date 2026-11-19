@@ -51,6 +51,10 @@ const ICONS = {
   trophy: '<path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
   play: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  idcard: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.5"/><path d="M5.5 16.5a3.5 3.5 0 0 1 7 0M15 10h4M15 14h3"/>',
+  printer: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
+  linkedin: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 10v7M8 7v.01M12 17v-4a2 2 0 0 1 4 0v4M12 10v7"/>',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
 };
 const ICON_ALIAS = { 'tata-busana': 'busana' };
 const icon = (n, cls = 'ico') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[ICON_ALIAS[n] || n] || ICONS.sekolah}</svg>`;
@@ -207,10 +211,11 @@ function renderShell() {
     <nav class="nav" id="nav" aria-label="Menu utama">
       <button class="nav-toggle nav-close" aria-label="Tutup menu">${icon('x')}</button>
       <a href="/"${act('home')}>Beranda</a>
-      <div class="dd"><button aria-haspopup="true"${['profil', 'perpustakaan', 'program'].includes(page) ? ' class="active"' : ''}>Profil ${icon('chev')}</button><div class="dd-panel">
+      <div class="dd"><button aria-haspopup="true"${['profil', 'perpustakaan', 'program', 'guru'].includes(page) ? ' class="active"' : ''}>Profil ${icon('chev')}</button><div class="dd-panel">
         ${ddLink('/profil', 'Profil Sekolah', 'Sambutan, sejarah, visi & misi', 'sekolah', '#235ba4')}
         ${s.profile_video ? ddLink('/profil#video', 'Video Profil', 'Kenali SMKN 8 Surabaya lewat video', 'play', '#f26836') : ''}
         ${ddLink('/program', 'Program Sekolah', 'Program kerja wakil kepala sekolah', 'clipboard', '#1d4ed8')}
+        ${ddLink('/guru', 'Profil Guru', 'Kenali guru, keahlian & sertifikasinya', 'idcard', '#0f766e')}
         ${ddLink('/perpustakaan', 'Perpustakaan', 'Profil & layanan perpustakaan', 'book', '#16966a')}
         ${ddLink('/dudi', 'DUDI / Mitra Industri', 'Industri yang bekerja sama', 'handshake', '#7c4bc4')}
       </div></div>
@@ -841,7 +846,7 @@ PAGES.artikel = async (main) => {
       ${p.cover ? `<div class="article-cover"><img src="${esc(p.cover)}" alt=""></div>` : ''}
       <div class="article-body">${sanitize(p.content)}</div>
       ${videoBlock(p.video_url, 'Video: ' + p.title)}
-      ${isGuru ? `<div class="author-box"><span class="av-i lg">${esc(nameInitials(p.author_name))}</span><div><span class="mono" style="color:var(--muted)">Tentang penulis</span><b>${esc(p.author_name)}</b><span>${esc(p.author_title || 'Guru SMK Negeri 8 Surabaya')}</span></div></div>
+      ${isGuru ? `<div class="author-box"><span class="av-i lg">${esc(nameInitials(p.author_name))}</span><div><span class="mono" style="color:var(--muted)">Tentang penulis</span><b>${esc(p.author_name)}</b><span>${esc(p.author_title || 'Guru SMK Negeri 8 Surabaya')}</span>${p.author_profile ? `<a class="ab-link" href="/guru/${encodeURIComponent(p.author_profile)}">Lihat profil lengkap penulis ${icon('arrow')}</a>` : ''}</div></div>
         <p class="t-note">Tulisan ini merupakan karya guru SMK Negeri 8 Surabaya dan telah melalui pemeriksaan Waka Manajemen Mutu sebelum dipublikasikan.</p>` : ''}
       <div class="share"><span class="mono" style="color:var(--muted)">Bagikan</span>
         <a href="https://wa.me/?text=${encodeURIComponent(p.title + ' ' + url)}" target="_blank" rel="noopener">${icon('wa')}WhatsApp</a>
@@ -851,7 +856,7 @@ PAGES.artikel = async (main) => {
     <aside>
       ${isGuru ? `<div class="side-card" style="--c:#0f766e"><h4>Penulis</h4>
         <div class="head-card"><span class="av-i lg">${esc(nameInitials(p.author_name))}</span><span><b>${esc(p.author_name)}</b><span>${esc(p.author_title || 'Guru SMK Negeri 8 Surabaya')}</span></span></div>
-        <a href="/berita?kategori=tulisan-guru" style="display:block;margin-top:10px;font-size:.88rem;font-weight:700;color:var(--blue)">Tulisan guru lainnya →</a></div>` : `<div class="side-card" style="--c:${u.color}"><h4>Dipublikasikan oleh</h4>
+        ${p.author_profile ? `<a href="/guru/${encodeURIComponent(p.author_profile)}" style="display:block;margin-top:10px;font-size:.88rem;font-weight:700;color:var(--blue)">Profil penulis →</a>` : ''}<a href="/berita?kategori=tulisan-guru" style="display:block;margin-top:6px;font-size:.88rem;font-weight:700;color:var(--blue)">Tulisan guru lainnya →</a></div>` : `<div class="side-card" style="--c:${u.color}"><h4>Dipublikasikan oleh</h4>
         <a class="head-card" href="${unitUrl(u)}"><span class="av" style="background:${u.color}">${u.logo ? `<img src="${esc(u.logo)}" alt="" style="object-fit:contain;background:#fff">` : icon(u.icon || u.slug)}</span><span><b>${esc(u.name)}</b><span>Lihat halaman unit →</span></span></a></div>`}
       <div class="side-card related"><h4>${isGuru ? 'Tulisan terkait' : 'Berita terkait'}</h4>${d.related.length ? d.related.map((r) => `<a href="/berita/${encodeURIComponent(r.slug)}"><span class="rt">${cover(r)}</span><span><b>${esc(r.title)}</b><small>${fmtDate(r.published_at)}</small></span></a>`).join('') : '<p style="color:var(--muted);font-size:.9rem;margin:0">Belum ada berita terkait.</p>'}</div>
     </aside>
@@ -1131,6 +1136,105 @@ PAGES.dudi = async (main) => {
   let t; $('#q').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { q = e.target.value.trim(); draw(); }, 200); };
   draw();
 };
+
+// ---------- Profil Guru (direktori & CV) ----------
+const TINGKAT_C = { Internasional: '#7c4bc4', Nasional: '#d9481f', Provinsi: '#c08a1e', 'Kota/Kabupaten': '#235ba4', Sekolah: '#16966a' };
+const guruBidang = (slug) => (slug === 'umum' ? { name: 'Mapel Umum / Adaptif', short: 'UMUM', color: '#475569' } : UNITS[slug] && UNITS[slug].type === 'jurusan' ? UNITS[slug] : null);
+const guruAvatar = (g, cls = '') => {
+  const c = guruBidang(g.unit_slug)?.color || '#0f766e';
+  return g.photo ? `<span class="g-av ${cls}" style="--c:${c}"><img src="${esc(g.photo)}" alt="Foto ${esc(g.full_name)}" loading="lazy"></span>` : `<span class="g-av ${cls}" style="--c:${c}"><i>${esc(nameInitials(g.full_name))}</i></span>`;
+};
+PAGES.guru = async (main) => {
+  const slug = decodeURIComponent(location.pathname.split('/').filter(Boolean)[1] || '');
+  return slug ? guruProfile(main, slug) : guruDirectory(main);
+};
+async function guruDirectory(main) {
+  setTitle('Profil Guru');
+  const jur = Object.values(UNITS).filter((u) => u.type === 'jurusan');
+  let bid = params.get('bidang') || '', q = '';
+  main.innerHTML = `${pageHero('Profil Guru', 'Kenali Bapak/Ibu guru SMK Negeri 8 Surabaya: latar pendidikan, keahlian, sertifikasi kompetensi, pengalaman industri, dan prestasinya.', ['Profil', 'Guru'])}
+  <section class="section" style="padding-top:40px"><div class="wrap">
+    <div class="filters" id="fBid"></div>
+    <div class="filters" style="margin-top:-12px"><label class="search" style="margin-left:0">${icon('search')}<input id="q" type="search" placeholder="Cari nama, mapel, atau keahlian…" aria-label="Cari guru"></label><span id="gCount" class="mono" style="color:var(--muted)"></span></div>
+    <div class="guru-grid" id="gList"><div class="empty">Memuat…</div></div>
+  </div></section>`;
+  const { items } = await api('guru');
+  const count = (v) => items.filter((g) => g.unit_slug === v).length;
+  $('#fBid').innerHTML = [['', 'Semua guru', '#0d1a2e'], ...jur.map((u) => [u.slug, u.name, u.color]), ['umum', 'Mapel Umum / Adaptif', '#475569']]
+    .map(([v, l, c]) => `<button class="chip-btn${v === bid ? ' on' : ''}" data-v="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)} <small>${v ? count(v) : items.length}</small></button>`).join('');
+  const draw = () => {
+    const k = q.toLowerCase();
+    const list = items.filter((g) => (!bid || g.unit_slug === bid) && (!k || `${g.full_name} ${g.position || ''} ${g.subjects || ''} ${g.skills || ''}`.toLowerCase().includes(k)));
+    $('#gCount').textContent = `${list.length} guru`;
+    $('#gList').innerHTML = list.length ? list.map((g) => { const b = guruBidang(g.unit_slug); const sk = String(g.skills || '').split(',').map((x) => x.trim()).filter(Boolean);
+      return `<a class="guru-card" href="/guru/${encodeURIComponent(g.slug)}" style="--c:${b?.color || '#0f766e'}">${guruAvatar(g)}
+        <b>${esc(g.full_name)}</b><span class="gc-pos">${esc(g.position || 'Guru SMK Negeri 8 Surabaya')}</span>
+        ${b ? `<span class="badge soft" style="--c:${b.color}">${esc(b.short || b.name)}</span>` : ''}
+        ${sk.length ? `<span class="gc-skills">${sk.slice(0, 3).map((x) => `<i>${esc(x)}</i>`).join('')}${sk.length > 3 ? `<i>+${sk.length - 3}</i>` : ''}</span>` : ''}
+        <span class="gc-more">Lihat profil ${icon('arrow')}</span></a>`; }).join('')
+      : `<div style="grid-column:1/-1">${items.length ? empty('Tidak ada guru yang cocok dengan pencarian.') : empty('Profil guru akan tampil di sini setelah Bapak/Ibu guru mengisi dan mempublikasikan profilnya.')}</div>`;
+    history.replaceState(null, '', '/guru' + (bid ? '?bidang=' + bid : ''));
+  };
+  $('#fBid').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; bid = b.dataset.v; $$('#fBid button').forEach((x) => x.classList.toggle('on', x === b)); draw(); };
+  let t; $('#q').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { q = e.target.value.trim(); draw(); }, 200); };
+  draw();
+}
+async function guruProfile(main, slug) {
+  let d;
+  try { d = await api('guru/' + encodeURIComponent(slug)); }
+  catch (e) {
+    setTitle('Profil guru');
+    main.innerHTML = `${pageHero('Profil tidak tersedia', 'Profil guru ini tidak ditemukan atau belum dipublikasikan oleh pemiliknya.', ['Profil Guru'])}
+    <section class="section"><div class="wrap"><a class="btn btn-dark" href="/guru">Lihat semua profil guru ${icon('arrow')}</a></div></section>`;
+    return;
+  }
+  const g = d.profile, cv = g.data || {}, b = guruBidang(g.unit_slug), c = b?.color || '#0f766e';
+  setTitle(g.full_name);
+  const sk = String(g.skills || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const L = g.links || {};
+  const linkBtn = (u, ic, l) => (u ? `<a class="gp-link" href="${esc(safeUrl(u))}" target="_blank" rel="noopener" title="${l}">${icon(ic)}<span>${l}</span></a>` : '');
+  const sec = (key, title, ic, body) => ((cv[key] || []).length ? `<section class="gp-sec" id="${key}"><h2>${icon(ic)}${title}</h2>${body(cv[key])}</section>` : '');
+  const years = (a, b2) => [a, b2 || (a ? 'sekarang' : '')].filter(Boolean).join(' – ');
+  const proof = (it) => `${it.gambar ? `<a class="gp-thumb" href="${esc(it.gambar)}" target="_blank" rel="noopener"><img src="${esc(it.gambar)}" alt="Bukti: ${esc(it.nama || it.judul)}" loading="lazy"></a>` : ''}`;
+  const proofLink = (it) => (it.link ? `<a class="gp-proof" href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener">${icon('link')}Lihat bukti</a>` : '');
+  const counts = [['kompetensi', 'Sertifikat'], ['prestasi', 'Prestasi'], ['pelatihan', 'Pelatihan'], ['karya', 'Karya']].map(([k, l]) => [(cv[k] || []).length, l]).filter(([n]) => n);
+  main.innerHTML = `${d.preview ? `<div class="gp-preview no-print"><div class="wrap">${icon('lock')}<span><b>Pratinjau.</b> ${g.hidden ? 'Profil ini sedang disembunyikan admin.' : g.visibility === 'public' ? 'Profil ini publik.' : 'Profil ini masih <b>PRIVAT</b> — hanya Anda dan admin yang dapat melihatnya. Ubah ke Publik di panel agar tampil di website.'}</span><a href="/admin/#/profil">Edit profil</a></div></div>` : ''}
+  <section class="gp-hero" style="--c:${c}"><div class="wrap">
+    <nav class="crumbs mono no-print" aria-label="Breadcrumb"><a href="/">Beranda</a><span><a href="/guru">Profil Guru</a></span><span>${esc(g.full_name)}</span></nav>
+    <div class="gp-head">${guruAvatar(g, 'xl')}
+      <div class="gp-id"><span class="mono gp-kicker">${esc(b ? (b.slug ? 'Program Keahlian ' : '') + b.name : 'SMK Negeri 8 Surabaya')}</span>
+        <h1>${esc(g.full_name)}</h1>
+        <p class="gp-pos">${esc(g.position || 'Guru SMK Negeri 8 Surabaya')}</p>
+        ${g.subjects ? `<p class="gp-sub">${icon('book')}<span>Mengampu: ${esc(g.subjects)}</span></p>` : ''}
+        <div class="gp-links no-print">${g.email ? linkBtn('mailto:' + g.email, 'mail', 'Email') : ''}${linkBtn(L.website, 'globe', 'Website')}${linkBtn(L.linkedin, 'linkedin', 'LinkedIn')}${linkBtn(L.instagram, 'instagram', 'Instagram')}${linkBtn(L.youtube, 'youtube', 'YouTube')}
+          <button class="gp-link" id="printCv" type="button">${icon('printer')}<span>Cetak / PDF</span></button></div>
+        <div class="gp-print-contact">${[g.email, L.website, L.linkedin].filter(Boolean).map(esc).join(' · ')}</div>
+      </div></div>
+    ${counts.length ? `<div class="gp-counts">${counts.map(([n, l]) => `<div><b>${n}</b><span>${l}</span></div>`).join('')}</div>` : ''}
+  </div></section>
+  <section class="section gp-body" style="--c:${c}"><div class="wrap gp-grid">
+    <div class="gp-main">
+      ${g.bio ? `<section class="gp-sec"><h2>${icon('user')}Tentang</h2><div class="gp-bio">${esc(g.bio).replace(/\n+/g, '<br>')}</div></section>` : ''}
+      ${sk.length ? `<section class="gp-sec gp-skills-sec"><h2>${icon('lsp')}Keahlian Utama</h2><div class="gp-skills">${sk.map((x) => `<span>${esc(x)}</span>`).join('')}</div></section>` : ''}
+      ${sec('kompetensi', 'Sertifikat Kompetensi', 'lsp', (a) => `<div class="gp-certs">${a.map((it) => `<article class="gp-cert">${proof(it)}<div><b>${esc(it.nama)}</b>
+        <span>${[it.penerbit, it.bidang].filter(Boolean).map(esc).join(' · ')}</span>
+        <small>${[it.tahun, it.berlaku ? 'berlaku s.d. ' + it.berlaku : ''].filter(Boolean).map(esc).join(' · ')}</small>${proofLink(it)}</div></article>`).join('')}</div>`)}
+      ${sec('pengalaman', 'Pengalaman Kerja & Industri', 'bkk', (a) => `<ol class="gp-tl">${a.map((it) => `<li><span class="mono">${esc(years(it.mulai, it.selesai))}</span><b>${esc(it.posisi)}</b><em>${esc(it.tempat)}</em>${it.ket ? `<p>${esc(it.ket)}</p>` : ''}</li>`).join('')}</ol>`)}
+      ${sec('pendidikan', 'Riwayat Pendidikan', 'sekolah', (a) => `<ol class="gp-tl">${a.map((it) => `<li><span class="mono">${esc([it.jenjang, it.tahun ? 'lulus ' + it.tahun : ''].filter(Boolean).join(' · '))}</span><b>${esc(it.prodi || it.jenjang)}</b><em>${esc(it.institusi)}</em></li>`).join('')}</ol>`)}
+      ${sec('prestasi', 'Prestasi & Penghargaan', 'trophy', (a) => `<div class="gp-certs">${a.map((it) => `<article class="gp-cert">${proof(it)}<div>${it.tingkat ? `<span class="badge soft" style="--c:${TINGKAT_C[it.tingkat] || c}">${esc(it.tingkat)}</span>` : ''}<b>${esc(it.judul)}</b>
+        <span>${esc(it.penyelenggara)}</span><small>${esc(it.tahun)}</small>${proofLink(it)}</div></article>`).join('')}</div>`)}
+      ${sec('pelatihan', 'Pelatihan, Diklat & Workshop', 'kurikulum', (a) => `<ul class="gp-list">${a.map((it) => `<li><b>${esc(it.nama)}</b><span>${[it.penyelenggara, it.tahun, it.jp ? it.jp + ' JP' : ''].filter(Boolean).map(esc).join(' · ')}</span></li>`).join('')}</ul>`)}
+      ${sec('karya', 'Karya, Publikasi & Produk', 'book', (a) => `<ul class="gp-list">${a.map((it) => `<li><b>${it.link ? `<a href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener">${esc(it.judul)} ${icon('arrowUR')}</a>` : esc(it.judul)}</b><span>${[it.jenis, it.tahun].filter(Boolean).map(esc).join(' · ')}</span></li>`).join('')}</ul>`)}
+    </div>
+    <aside class="gp-side">
+      ${(cv.organisasi || []).length ? `<div class="side-card"><h4>Organisasi & kepanitiaan</h4><ul class="gp-list sm">${cv.organisasi.map((it) => `<li><b>${esc(it.nama)}</b><span>${[it.peran, it.tahun].filter(Boolean).map(esc).join(' · ')}</span></li>`).join('')}</ul></div>` : ''}
+      ${d.posts.length ? `<div class="side-card no-print"><h4>Tulisan di website</h4><div class="gp-posts">${d.posts.map((r) => `<a href="/berita/${encodeURIComponent(r.slug)}"><small class="mono">${esc(CATS[r.category] || '')}</small><b>${esc(r.title)}</b><span>${fmtDate(r.published_at)}</span></a>`).join('')}</div></div>` : ''}
+      <div class="side-card no-print"><h4>Profil guru lainnya</h4><a class="btn btn-dark btn-sm" href="/guru${b ? '?bidang=' + encodeURIComponent(g.unit_slug) : ''}">${b ? 'Guru ' + esc(b.short || b.name) : 'Semua guru'} ${icon('arrow')}</a></div>
+      <p class="gp-updated mono">Diperbarui ${fmtDate(g.updated_at)}</p>
+    </aside>
+  </div></section>`;
+  $('#printCv').onclick = () => window.print();
+}
 
 // ---------- Perpustakaan ----------
 PAGES.perpustakaan = async (main) => {

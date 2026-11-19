@@ -34,6 +34,12 @@ const P = {
   pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
   check: '<path d="M20 6L9 17l-5-5"/>',
   upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
+  idcard: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.5"/><path d="M5.5 16.5a3.5 3.5 0 0 1 7 0M15 10h4M15 14h3"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
 };
 const ic = (n) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 
@@ -66,13 +72,13 @@ const rupiah = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
 const jurOptions = () => UNITS.filter((u) => u.type === 'jurusan').map((u) => ({ v: u.slug, l: u.name }));
 
 // ---------- Unggah gambar (otomatis diperkecil di browser) ----------
-async function compress(file, maxW = 1600) {
+async function compress(file, maxW = 1600, jpeg = false) {
   if (file.type === 'image/gif' && file.size < 1.8e6) return file;
   const bmp = await createImageBitmap(file);
   const scale = Math.min(1, maxW / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
-  const keepPng = file.type === 'image/png' && maxW <= 800;
+  const keepPng = !jpeg && file.type === 'image/png' && maxW <= 800;
   const ctx = c.getContext('2d');
   if (!keepPng) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); }
   ctx.drawImage(bmp, 0, 0, c.width, c.height);
@@ -81,10 +87,10 @@ async function compress(file, maxW = 1600) {
   do { blob = await new Promise((r) => c.toBlob(r, type, q)); q -= 0.12; } while (blob.size > 1.8e6 && q > 0.3 && !keepPng);
   return blob;
 }
-async function uploadImage(file, maxW) {
+async function uploadImage(file, maxW, tag) {
   if (!/^image\//.test(file.type)) throw new Error('File harus berupa gambar.');
-  const blob = await compress(file, maxW);
-  const r = await fetch('/api/media', { method: 'POST', headers: { 'Content-Type': blob.type }, body: blob });
+  const blob = await compress(file, maxW, tag === 'profil');
+  const r = await fetch('/api/media' + (tag ? `?for=${tag}` : ''), { method: 'POST', headers: { 'Content-Type': blob.type }, body: blob });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || 'Gagal mengunggah gambar');
   return d.url;
@@ -128,7 +134,7 @@ function bindForm(root, fields) {
     file.onchange = async () => {
       if (!file.files[0]) return;
       pv.textContent = 'Mengunggah…';
-      try { const url = await uploadImage(file.files[0], f.type === 'logo' ? 600 : 1600); hid.value = url; pv.style.backgroundImage = `url('${url}')`; pv.textContent = ''; clr.hidden = false; }
+      try { const url = await uploadImage(file.files[0], f.maxW || (f.type === 'logo' ? 600 : 1600), f.tag); hid.value = url; pv.style.backgroundImage = `url('${url}')`; pv.textContent = ''; clr.hidden = false; }
       catch (e) { pv.textContent = ''; toast(e.message, true); }
       file.value = '';
     };
@@ -374,14 +380,14 @@ const RES = {
 
 // ---------- Kerangka panel ----------
 function menu() {
-  if (isGuru()) return [['Menulis', [['dashboard', 'Dasbor', 'dash'], ['posts', 'Tulisan Saya', 'pen']]]];
+  if (isGuru()) return [['Menulis', [['dashboard', 'Dasbor', 'dash'], ['posts', 'Tulisan Saya', 'pen']]], ['Profil', [['profil', 'Profil / CV Saya', 'idcard']]]];
   const u = ME.unit_slug, items = [['dashboard', 'Dasbor', 'dash'], ['posts', 'Berita & Kegiatan', 'news'], ['agenda', 'Agenda', 'cal'], ['gallery', 'Galeri', 'img'], ['prestasi', 'Prestasi Siswa', 'trophy']];
   if (isAdmin() || UNIT[u]?.type === 'waka') items.splice(1, 0, ['program', 'Program Sekolah', 'clip']);
   if (canReview()) items.splice(1, 0, ['review', 'Persetujuan Tulisan', 'check']);
   const groups = [['Konten', items]];
   if (isAdmin()) {
     groups.push(['Unit', [['units', 'Profil Unit & Waka', 'unit'], ['product', 'Katalog TEFA', 'bag'], ['dudi', 'DUDI / Mitra Industri', 'handshake'], ['lowongan', 'Lowongan (BKK)', 'job'], ['skema', 'Skema (LSP)', 'badge'], ['/sarpras', 'SI-SARPRAS (Inventaris)', 'box']]]);
-    groups.push(['Sekolah', [['settings', 'Pengaturan Situs', 'gear'], ['users', 'Pengguna & Akses', 'users'], ['messages', 'Pesan Masuk', 'mail'], ['backup', 'Backup & Pemulihan', 'shield']]]);
+    groups.push(['Sekolah', [['settings', 'Pengaturan Situs', 'gear'], ['users', 'Pengguna & Akses', 'users'], ['profil-guru', 'Profil Guru', 'idcard'], ['messages', 'Pesan Masuk', 'mail'], ['backup', 'Backup & Pemulihan', 'shield']]]);
   } else {
     const g = [[`units/${u}`, 'Profil Unit', 'unit']];
     if (isBkk()) g.push(['lowongan', 'Lowongan Kerja (BKK)', 'job'], ['messages', 'Pesan Masuk', 'mail']);
@@ -405,7 +411,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 23</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 24</span>
       </div>
     </aside>
     <div class="main">
@@ -777,12 +783,20 @@ V.users = async (view) => {
 };
 
 // ---------- Tulisan guru ----------
+function profileCard(p) {
+  const c = p?.completeness || 0, pub = p?.visibility === 'public' && !p?.hidden;
+  return `<div class="box prof-card"><div class="pc-l"><span class="pc-ic">${ic('idcard')}</span><div><b>Profil / CV Saya</b>
+    <span>${!p ? 'Belum diisi. Lengkapi profil Anda: foto, pendidikan, keahlian & sertifikat kompetensi, prestasi.' : p.hidden ? 'Profil sedang disembunyikan oleh admin.' : pub ? 'Profil Anda <b>tampil di website</b>.' : 'Profil Anda masih <b>privat</b> (hanya Anda & admin yang bisa melihat).'}</span>
+    <div class="meter"><i style="width:${c}%"></i></div><small>Kelengkapan ${c}%</small></div></div>
+    <div class="pc-r"><a class="btn btn-primary btn-sm" href="#/profil">${ic('pen')}${p ? 'Perbarui profil' : 'Isi profil'}</a>${p ? `<a class="btn btn-line btn-sm" href="/guru/${encodeURIComponent(p.slug)}" target="_blank">${ic('eye')}Lihat</a>` : ''}</div></div>`;
+}
 function guruDashboard(view, d) {
   const stats = [[d.publish, 'Tulisan tayang', '#16966a'], [d.review, 'Menunggu persetujuan', '#d98a06'], [d.ditolak, 'Perlu revisi', '#d4364b'], [d.draft, 'Draf', '#5a6474'], [d.views, 'Total dibaca', '#235ba4']];
   view.innerHTML = `
     <div class="welcome"><div><span class="mono" style="color:var(--sky)">Guru penulis</span>
       <h2>Halo, ${esc(ME.name || ME.username)}</h2><p>Bagikan opini, tips & tutorial, atau artikel praktis Anda untuk website SMKN 8 Surabaya. Setiap tulisan diperiksa Waka Manajemen Mutu (WMM) sebelum tayang.</p></div>
       <div><a class="btn btn-primary" href="#/posts/new">${ic('pen')}Tulis artikel baru</a></div></div>
+    ${profileCard(d.profile)}
     ${d.ditolak ? `<div class="notice bad">${ic('pen')} Ada <b>${d.ditolak} tulisan</b> yang dikembalikan WMM untuk direvisi. Buka <a href="#/posts" style="font-weight:700">Tulisan Saya</a> untuk melihat catatannya.</div>` : ''}
     <div class="grid-stats">${stats.map(([v, l, c]) => `<div class="stat" style="--c:${c}"><b>${v}</b><span>${l}</span></div>`).join('')}</div>
     <div class="form-grid">
@@ -794,6 +808,174 @@ function guruDashboard(view, d) {
         <li>Tulisan yang dikembalikan bisa diperbaiki lalu dikirim lagi.</li></ol></div>
     </div>`;
 }
+
+// ---------- Profil / CV guru ----------
+const JENJANG = ['S3', 'S2', 'S1', 'D4', 'D3', 'D2', 'D1', 'Profesi (PPG)', 'SMA/SMK', 'Lainnya'];
+const TINGKAT = ['Sekolah', 'Kota/Kabupaten', 'Provinsi', 'Nasional', 'Internasional'];
+const JENIS_KARYA = ['Buku', 'Artikel / Jurnal', 'Modul / Bahan Ajar', 'Produk / Karya Desain', 'Video Pembelajaran', 'Lainnya'];
+const opt = (arr) => () => [{ v: '', l: '— pilih —' }, ...arr.map((x) => ({ v: x, l: x }))];
+const CV = [
+  ['pendidikan', 'Riwayat Pendidikan', 'Urutkan dari jenjang tertinggi.', 'Tambah pendidikan', [
+    { k: 'jenjang', label: 'Jenjang', type: 'select', opts: opt(JENJANG), half: true }, { k: 'tahun', label: 'Tahun lulus', half: true, placeholder: 'mis. 2012' },
+    { k: 'institusi', label: 'Nama kampus / sekolah', half: true, placeholder: 'mis. Universitas Negeri Surabaya' }, { k: 'prodi', label: 'Program studi / jurusan', half: true, placeholder: 'mis. Pendidikan Tata Boga' }]],
+  ['kompetensi', 'Keahlian & Sertifikat Kompetensi', 'Bukti keahlian Anda: sertifikat BNSP/LSP, sertifikat industri, asesor, dsb. Bukti bisa berupa tautan (gratis kuota) atau foto sertifikat.', 'Tambah sertifikat / kompetensi', [
+    { k: 'nama', label: 'Nama kompetensi / skema sertifikasi', placeholder: 'mis. Barista Level 2, Asesor Kompetensi, Adobe Certified Professional' },
+    { k: 'bidang', label: 'Bidang keahlian', half: true, placeholder: 'mis. Tata Boga' }, { k: 'penerbit', label: 'Lembaga penerbit', half: true, placeholder: 'mis. BNSP / LSP P1 / industri' },
+    { k: 'tahun', label: 'Tahun', half: true }, { k: 'berlaku', label: 'Berlaku sampai (opsional)', half: true, placeholder: 'mis. 2028 / seumur hidup' },
+    { k: 'link', label: 'Tautan bukti (opsional)', type: 'url', placeholder: 'https://drive.google.com/…' }, { k: 'gambar', label: 'Foto sertifikat (opsional)', type: 'img' }]],
+  ['pengalaman', 'Pengalaman Kerja & Industri', 'Termasuk pengalaman mengajar, kerja di industri, magang/praktik industri guru.', 'Tambah pengalaman', [
+    { k: 'posisi', label: 'Posisi / jabatan', half: true, placeholder: 'mis. Guru Produktif Kuliner' }, { k: 'tempat', label: 'Tempat / perusahaan', half: true, placeholder: 'mis. SMKN 8 Surabaya' },
+    { k: 'mulai', label: 'Tahun mulai', half: true }, { k: 'selesai', label: 'Tahun selesai', half: true, placeholder: 'kosongkan bila masih' },
+    { k: 'ket', label: 'Keterangan singkat (opsional)', type: 'textarea' }]],
+  ['prestasi', 'Prestasi & Penghargaan', 'Prestasi pribadi maupun sebagai pembimbing.', 'Tambah prestasi', [
+    { k: 'judul', label: 'Nama prestasi / penghargaan', placeholder: 'mis. Juara 1 Lomba Inovasi Pembelajaran' },
+    { k: 'tingkat', label: 'Tingkat', type: 'select', opts: opt(TINGKAT), half: true }, { k: 'tahun', label: 'Tahun', half: true },
+    { k: 'penyelenggara', label: 'Penyelenggara', placeholder: 'mis. Dinas Pendidikan Provinsi Jawa Timur' },
+    { k: 'link', label: 'Tautan bukti (opsional)', type: 'url' }, { k: 'gambar', label: 'Foto piagam / bukti (opsional)', type: 'img' }]],
+  ['pelatihan', 'Pelatihan, Diklat & Workshop', '', 'Tambah pelatihan', [
+    { k: 'nama', label: 'Nama pelatihan', placeholder: 'mis. Diklat Kurikulum Merdeka' },
+    { k: 'penyelenggara', label: 'Penyelenggara', half: true }, { k: 'tahun', label: 'Tahun', half: true }, { k: 'jp', label: 'Jumlah jam (JP, opsional)', half: true }]],
+  ['karya', 'Karya, Publikasi & Produk', 'Buku, artikel jurnal, modul ajar, karya desain, video pembelajaran, dll.', 'Tambah karya', [
+    { k: 'judul', label: 'Judul karya' }, { k: 'jenis', label: 'Jenis', type: 'select', opts: opt(JENIS_KARYA), half: true }, { k: 'tahun', label: 'Tahun', half: true },
+    { k: 'link', label: 'Tautan (opsional)', type: 'url' }]],
+  ['organisasi', 'Organisasi & Kepanitiaan', '', 'Tambah organisasi', [
+    { k: 'nama', label: 'Nama organisasi', half: true, placeholder: 'mis. MGMP Tata Boga Kota Surabaya' }, { k: 'peran', label: 'Peran', half: true, placeholder: 'mis. Ketua' }, { k: 'tahun', label: 'Tahun / periode', half: true }]],
+];
+const PROFILE_FIELDS = [
+  { k: 'full_name', label: 'Nama lengkap & gelar', required: true, max: 120 },
+  { k: 'position', label: 'Jabatan / peran', half: true, placeholder: 'mis. Guru Produktif Kuliner, Kaprog DKV' },
+  { k: 'unit_slug', label: 'Bidang / program keahlian', type: 'select', half: true, opts: () => [{ v: '', l: '— pilih —' }, ...jurOptions(), { v: 'umum', l: 'Mata pelajaran umum / adaptif' }] },
+  { k: 'subjects', label: 'Mata pelajaran yang diampu', placeholder: 'mis. Pengolahan Makanan Kontinental, Pastry' },
+  { k: 'bio', label: 'Tentang saya (ringkasan profil)', type: 'textarea', rows: 4, help: 'Ceritakan singkat latar belakang, minat, dan fokus mengajar Anda (maks. 1.500 karakter).' },
+  { k: 'skills', label: 'Keahlian utama (pisahkan dengan koma)', placeholder: 'mis. Pastry, Food Styling, Barista, Manajemen Dapur', help: 'Tampil sebagai label keahlian. Maksimal 20.' },
+  { k: 'email', label: 'Email untuk dihubungi (opsional)', type: 'email', half: true, help: 'Kosongkan bila tidak ingin ditampilkan.' },
+  { k: 'l_website', label: 'Website / portofolio', type: 'url', half: true, placeholder: 'https://' },
+  { k: 'l_linkedin', label: 'LinkedIn', type: 'url', half: true, placeholder: 'https://linkedin.com/in/…' },
+  { k: 'l_instagram', label: 'Instagram', type: 'url', half: true, placeholder: 'https://instagram.com/…' },
+  { k: 'l_youtube', label: 'YouTube', type: 'url', half: true, placeholder: 'https://youtube.com/@…' },
+];
+function cvItemField(f, v) {
+  v = v ?? '';
+  const lab = `<span>${esc(f.label)}</span>`;
+  if (f.type === 'img') return `<div class="field"><span>${esc(f.label)}</span><div class="img-field cv-img" data-cvimg>
+      <div class="preview" style="${v ? `background-image:url('${esc(v)}')` : ''}">${v ? '' : 'Belum ada gambar'}</div>
+      <input type="hidden" data-f="${f.k}" value="${esc(v)}"><input type="file" accept="image/*">
+      <div class="row"><button type="button" class="btn btn-line btn-sm" data-pick>${ic('upload')}Pilih gambar</button><button type="button" class="btn btn-danger btn-sm" data-clear${v ? '' : ' hidden'}>Hapus</button></div></div></div>`;
+  if (f.type === 'select') return `<label class="field${f.half ? ' half' : ''}">${lab}<select data-f="${f.k}">${f.opts().map((o) => `<option value="${esc(o.v)}"${o.v === v ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}${v && !f.opts().some((o) => o.v === v) ? `<option selected>${esc(v)}</option>` : ''}</select></label>`;
+  if (f.type === 'textarea') return `<label class="field">${lab}<textarea data-f="${f.k}" rows="2">${esc(v)}</textarea></label>`;
+  return `<label class="field${f.half ? ' half' : ''}">${lab}<input type="${f.type === 'url' ? 'url' : 'text'}" data-f="${f.k}" value="${esc(v)}"${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}></label>`;
+}
+const cvItemHtml = (fields, it = {}) => `<div class="cv-item"><div class="cv-tools"><button type="button" class="icon-btn" data-up title="Naikkan">${ic('up')}</button><button type="button" class="icon-btn bad" data-del title="Hapus">${ic('trash')}</button></div><div class="fields">${fields.map((f) => cvItemField(f, it[f.k])).join('')}</div></div>`;
+
+V.profil = async (view) => {
+  const d = await api('admin/profil');
+  let p = d.profile, dirty = false;
+  const url = () => `/guru/${encodeURIComponent(p.slug)}`;
+  setHead('Profil / CV Saya', `<a class="btn btn-line" id="pvBtn" href="${url()}" target="_blank">${ic('eye')}Lihat profil</a><button class="btn btn-primary" id="saveTop">${ic('check')}Simpan</button>`);
+  const vals = { ...p, ...Object.fromEntries(Object.entries(p.links || {}).map(([k, v]) => [`l_${k}`, v])) };
+  view.innerHTML = `<form id="pf" class="prof-form" novalidate>
+    <div class="box vis-box">
+      <div class="vis-opts">
+        <label class="vis-opt"><input type="radio" name="visibility" value="private"${p.visibility !== 'public' ? ' checked' : ''}><span>${ic('lock')}<b>Privat</b><small>Hanya Anda & admin yang dapat melihat. Cocok selama masih melengkapi.</small></span></label>
+        <label class="vis-opt"><input type="radio" name="visibility" value="public"${p.visibility === 'public' ? ' checked' : ''}><span>${ic('globe')}<b>Publik</b><small>Tampil di halaman <b>Profil Guru</b> website sekolah dan dapat dilihat siapa saja.</small></span></label>
+      </div>
+      <div class="vis-info"><div><span class="mono">Kelengkapan</span><div class="meter"><i id="cmp" style="width:${p.completeness}%"></i></div><small id="cmpT">${p.completeness}% lengkap</small></div>
+        <div><span class="mono">Alamat profil</span><a href="${url()}" target="_blank" class="purl">smkn8-sby.sch.id${url()}</a></div>
+        <div><span class="mono">Gambar bukti</span><small id="imgQ">${d.mediaCount ? Math.max(0, d.mediaCount - (p.photo ? 1 : 0)) : 0} dari ${d.maxImages} terpakai</small></div></div>
+      ${p.hidden ? `<div class="notice bad" style="margin:14px 0 0">Profil Anda sedang disembunyikan oleh admin, sehingga tidak tampil di website walaupun diatur Publik. Hubungi admin sekolah.</div>` : ''}
+    </div>
+    <div class="box"><h3>Data diri</h3><div class="prof-top">
+      <div class="field"><span>Foto profil</span><div class="img-field logo photo" data-img="photo"><div class="preview" style="${p.photo ? `background-image:url('${esc(p.photo)}')` : ''}">${p.photo ? '' : 'Belum ada foto'}</div>
+        <input type="hidden" name="photo" value="${esc(p.photo || '')}"><input type="file" accept="image/*">
+        <div class="row"><button type="button" class="btn btn-line btn-sm" data-pick>${ic('upload')}Pilih foto</button><button type="button" class="btn btn-danger btn-sm" data-clear${p.photo ? '' : ' hidden'}>Hapus</button></div></div><small>Foto formal, wajah terlihat jelas. Otomatis diperkecil.</small></div>
+      <div class="fields">${PROFILE_FIELDS.map((f) => fieldHtml(f, vals[f.k])).join('')}</div></div></div>
+    ${CV.map(([k, title, help, add, fields]) => `<div class="box cv-sec" data-sec="${k}"><h3>${esc(title)}</h3>${help ? `<p class="t-sub" style="margin:-6px 0 14px;white-space:normal">${esc(help)}</p>` : ''}
+      <div class="cv-list">${(p.data?.[k] || []).map((it) => cvItemHtml(fields, it)).join('')}</div>
+      <button type="button" class="btn btn-line btn-sm" data-add>${ic('plus')}${esc(add)}</button></div>`).join('')}
+    <div class="save-bar"><span id="dirtyT">Semua perubahan tersimpan.</span><button class="btn btn-primary">${ic('check')}Simpan profil</button></div>
+  </form>`;
+  const form = $('#pf');
+  bindForm(form, [{ k: 'photo', type: 'logo', maxW: 500, tag: 'profil' }]);
+  const markDirty = () => { dirty = true; $('#dirtyT').textContent = 'Ada perubahan yang belum disimpan.'; $('#dirtyT').classList.add('warn'); };
+  form.addEventListener('input', markDirty); form.addEventListener('change', markDirty);
+  window.onbeforeunload = (e) => { if (dirty && location.hash.startsWith('#/profil')) { e.preventDefault(); e.returnValue = ''; } };
+  const bindItem = (el) => {
+    $('[data-del]', el).onclick = () => { if (confirm('Hapus baris ini?')) { el.remove(); markDirty(); } };
+    $('[data-up]', el).onclick = () => { const prev = el.previousElementSibling; if (prev) { el.parentNode.insertBefore(el, prev); markDirty(); } };
+    $$('[data-cvimg]', el).forEach((box) => {
+      const file = $('input[type=file]', box), hid = $('input[type=hidden]', box), pv = $('.preview', box), clr = $('[data-clear]', box);
+      $('[data-pick]', box).onclick = () => file.click();
+      clr.onclick = () => { hid.value = ''; pv.style.backgroundImage = ''; pv.textContent = 'Belum ada gambar'; clr.hidden = true; markDirty(); };
+      file.onchange = async () => {
+        if (!file.files[0]) return;
+        pv.textContent = 'Mengunggah…';
+        try { const u = await uploadImage(file.files[0], 1100, 'profil'); hid.value = u; pv.style.backgroundImage = `url('${u}')`; pv.textContent = ''; clr.hidden = false; markDirty(); }
+        catch (e) { pv.textContent = hid.value ? '' : 'Belum ada gambar'; toast(e.message, true); }
+        file.value = '';
+      };
+    });
+  };
+  $$('.cv-item', form).forEach(bindItem);
+  $$('.cv-sec', form).forEach((sec) => {
+    const fields = CV.find((c) => c[0] === sec.dataset.sec)[4];
+    $('[data-add]', sec).onclick = () => {
+      const list = $('.cv-list', sec); list.insertAdjacentHTML('beforeend', cvItemHtml(fields));
+      const el = list.lastElementChild; bindItem(el); $('input,select', el)?.focus(); markDirty();
+    };
+  });
+  const collect = () => {
+    const f = readForm(form, PROFILE_FIELDS);
+    const out = { full_name: f.full_name, position: f.position, unit_slug: f.unit_slug, subjects: f.subjects, bio: f.bio, skills: f.skills, email: f.email,
+      photo: $('[name=photo]', form).value, visibility: $('[name=visibility]:checked', form)?.value || 'private',
+      links: { website: f.l_website, linkedin: f.l_linkedin, instagram: f.l_instagram, youtube: f.l_youtube }, data: {} };
+    for (const [k] of CV) out.data[k] = $$(`[data-sec="${k}"] .cv-item`, form).map((it) => Object.fromEntries($$('[data-f]', it).map((x) => [x.dataset.f, x.value.trim()])));
+    return out;
+  };
+  const save = async (e) => {
+    e?.preventDefault();
+    const b = collect();
+    if (!b.full_name) { toast('Nama lengkap wajib diisi.', true); $('[name=full_name]', form).focus(); return; }
+    const btns = $$('.save-bar .btn, #saveTop'); btns.forEach((x) => (x.disabled = true));
+    try {
+      const r = await api('admin/profil', { method: 'PUT', body: b });
+      p = r.profile; dirty = false;
+      $('#dirtyT').textContent = 'Semua perubahan tersimpan.'; $('#dirtyT').classList.remove('warn');
+      $('#cmp').style.width = p.completeness + '%'; $('#cmpT').textContent = p.completeness + '% lengkap';
+      toast(b.visibility === 'public' ? 'Profil tersimpan dan tampil di website.' : 'Profil tersimpan (privat).');
+    } catch (er) { toast(er.message, true); }
+    btns.forEach((x) => (x.disabled = false));
+  };
+  form.onsubmit = save; $('#saveTop').onclick = save;
+};
+
+V['profil-guru'] = async (view) => {
+  setHead('Profil Guru', `<a class="btn btn-line" href="/guru" target="_blank">${ic('ext')}Halaman Profil Guru</a>`);
+  const { items } = await api('admin/profil-guru');
+  const st = (r) => (!r.slug ? ['Belum diisi', '#888'] : r.hidden ? ['Disembunyikan admin', '#d4364b'] : r.visibility === 'public' ? ['Publik', '#16966a'] : ['Privat', '#5a6474']);
+  const n = { all: items.length, pub: items.filter((r) => r.slug && !r.hidden && r.visibility === 'public').length, none: items.filter((r) => !r.slug).length };
+  view.innerHTML = `<div class="grid-stats">${[[n.all, 'Akun guru', '#235ba4'], [n.pub, 'Profil publik', '#16966a'], [n.all - n.pub - n.none, 'Privat / disembunyikan', '#5a6474'], [n.none, 'Belum mengisi', '#d98a06']].map(([v, l, c]) => `<div class="stat" style="--c:${c}"><b>${v}</b><span>${l}</span></div>`).join('')}</div>
+    <div class="notice info">Setiap guru mengisi profil/CV sendiri dari akunnya (menu <b>Profil / CV Saya</b>) dan memilih sendiri <b>Publik</b> atau <b>Privat</b>. Admin dapat <b>menyembunyikan</b> profil yang isinya tidak pantas.</div>
+    <div class="toolbar"><div class="search">${ic('search')}<input id="q" placeholder="Cari nama guru…"></div>
+      <select id="fs"><option value="">Semua status</option><option>Publik</option><option>Privat</option><option>Belum diisi</option><option>Disembunyikan admin</option></select></div>
+    <div class="box" style="padding:0;overflow:auto"><table class="tbl"><thead><tr><th>Guru</th><th>Bidang</th><th>Kelengkapan</th><th>Status</th><th>Diperbarui</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>`;
+  const draw = () => {
+    const q = $('#q').value.toLowerCase(), fs = $('#fs').value;
+    const rows = items.filter((r) => (!q || `${r.full_name || ''} ${r.name || ''} ${r.username}`.toLowerCase().includes(q)) && (!fs || st(r)[0] === fs));
+    $('#tb').innerHTML = rows.length ? rows.map((r) => { const [l, c] = st(r); return `<tr>
+      <td><div class="who"><span class="av" style="${r.photo ? `background-image:url('${esc(r.photo)}')` : ''}">${r.photo ? '' : esc((r.full_name || r.name || r.username).replace(/^(Drs?|Dra|Ir|H|Hj)\.?\s+/i, '').split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase())}</span><span><span class="t-title">${esc(r.full_name || r.name || r.username)}</span><span class="t-sub">@${esc(r.username)}${r.position ? ' · ' + esc(r.position) : ''}${r.active ? '' : ' · akun nonaktif'}</span></span></div></td>
+      <td>${r.unit_slug && UNIT[r.unit_slug] ? unitTag(r.unit_slug) : r.unit_slug === 'umum' ? '<span class="tag" style="--c:#5a6474">Umum</span>' : '-'}</td>
+      <td style="min-width:120px">${r.slug ? `<div class="meter sm"><i style="width:${r.completeness}%"></i></div><span class="t-sub">${r.completeness}%</span>` : '-'}</td>
+      <td style="white-space:nowrap"><span class="tag" style="--c:${c}">${l}</span></td><td class="t-sub">${r.updated_at ? fmtDate(r.updated_at) : '-'}</td>
+      <td style="white-space:nowrap">${r.slug ? `<a class="btn btn-line btn-sm" href="/guru/${encodeURIComponent(r.slug)}" target="_blank">${ic('eye')}Lihat</a> <button class="btn ${r.hidden ? 'btn-line' : 'btn-danger'} btn-sm" data-hide="${r.user_id}" data-v="${r.hidden ? 0 : 1}">${r.hidden ? 'Tampilkan lagi' : 'Sembunyikan'}</button>` : ''}</td></tr>`; }).join('') : '<tr><td colspan="6"><div class="empty">Tidak ada data.</div></td></tr>';
+    $$('[data-hide]').forEach((b) => (b.onclick = async () => {
+      const hide = b.dataset.v === '1';
+      if (hide && !confirm('Sembunyikan profil ini dari website? Guru tetap dapat mengedit profilnya.')) return;
+      try { await api(`admin/profil-guru/${b.dataset.hide}`, { method: 'POST', body: { hidden: hide ? 1 : 0 } }); const r = items.find((x) => String(x.user_id) === b.dataset.hide); r.hidden = hide ? 1 : 0; draw(); toast(hide ? 'Profil disembunyikan' : 'Profil ditampilkan kembali'); }
+      catch (e) { toast(e.message, true); }
+    }));
+  };
+  $('#q').oninput = draw; $('#fs').onchange = draw; draw();
+};
 
 V.review = async (view, id) => {
   if (id) return reviewDetail(view, id);
@@ -894,7 +1076,7 @@ const TABLE_LABEL = {
   settings: 'Pengaturan situs', units: 'Profil unit (jurusan, lembaga, TEFA, Waka)', users: 'Akun pengguna', posts: 'Berita & kegiatan', agenda: 'Agenda',
   gallery: 'Galeri foto', programs: 'Program sekolah', prestasi: 'Prestasi siswa', lowongan: 'Lowongan kerja (BKK)', skema: 'Skema sertifikasi (LSP)',
   dudi: 'DUDI / mitra industri', messages: 'Pesan masuk', sarpras_meta: 'SI-SARPRAS: lokasi, pengumuman, template', sarpras_assets: 'SI-SARPRAS: inventaris aset',
-  sarpras_bast: 'SI-SARPRAS: BAST/BAPB', media: 'Gambar & berkas unggahan',
+  sarpras_bast: 'SI-SARPRAS: BAST/BAPB', teacher_profiles: 'Profil / CV guru', media: 'Gambar & berkas unggahan',
 };
 const daysSince = (iso) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 864e5) : null);
 const fmtBytes = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
@@ -1027,6 +1209,7 @@ V.backup = async (view) => {
 // ---------- Router ----------
 async function route() {
   if (!ME) return;
+  if (!location.hash.startsWith('#/profil')) window.onbeforeunload = null;
   const [a, b] = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   const view = $('#view');
   $$('#menu a').forEach((x) => x.classList.toggle('on', x.dataset.h === (b && a === 'units' ? `units/${b}` : a || 'dashboard') || (a === 'units' && x.dataset.h === 'units' && isAdmin())));
@@ -1035,7 +1218,8 @@ async function route() {
   window.scrollTo(0, 0);
   try {
     if (!a || a === 'dashboard') return await V.dashboard(view);
-    if (isGuru() && a !== 'posts' && a !== 'account') throw new Error('Akun guru hanya dapat menulis di menu "Tulisan Saya".');
+    if (isGuru() && a !== 'posts' && a !== 'account' && a !== 'profil') throw new Error('Akun guru hanya dapat membuka menu Tulisan Saya dan Profil / CV Saya.');
+    if (a === 'profil') { if (!isGuru()) throw new Error('Profil / CV hanya untuk akun guru.'); return await V.profil(view); }
     if (a === 'review') { if (!canReview()) throw new Error('Menu ini khusus WMM dan admin.'); return await V.review(view, b); }
     if (a === 'messages' && !isAdmin() && !isBkk()) throw new Error('Menu ini khusus admin, BKK, dan Waka Humas.');
     if (RES[a]) {
