@@ -479,7 +479,7 @@ PAGES.home = async (main) => {
   </div></section>
 
   <section class="section alt"><div class="wrap">
-    <div class="duo" style="grid-template-columns:1fr 1fr;align-items:start">
+    <div class="duo" style="align-items:start">
       <div>${secHead('09', 'Agenda', 'Agenda Terdekat', '', `<a class="link-arrow" href="/agenda">Semua agenda ${icon('arrow')}</a>`)}<div class="agenda-list" id="homeAgenda"></div></div>
       <div>${secHead('10', 'Galeri', 'Potret Kegiatan', '', `<a class="link-arrow" href="/galeri">Galeri ${icon('arrow')}</a>`)}<div class="gal-strip" id="homeGal" style="grid-template-columns:repeat(3,1fr)"></div></div>
     </div>
@@ -704,7 +704,7 @@ PAGES.unit = async (main) => {
       <div class="unit-block" id="dudi"><h2>Mitra Industri (DUDI)</h2><p class="prose" style="margin-top:-6px;color:var(--muted)">Dunia usaha & dunia industri tempat siswa ${esc(unit.name)} praktik kerja lapangan dan magang.</p>
         <div class="dudi-grid compact" id="unitDudi"></div><p style="margin-top:16px"><a class="link-arrow" href="/dudi?jurusan=${esc(slug)}">Lihat semua DUDI ${esc(unit.short || '')} ${icon('arrow')}</a></p></div>` : ''}
       ${isJur ? `<div class="unit-block" id="prestasi"><h2>Prestasi Siswa</h2><div class="pres-grid two" id="unitPres"></div><p style="margin-top:16px"><a class="link-arrow" href="/prestasi?jurusan=${esc(slug)}">Semua prestasi ${esc(unit.short || '')} ${icon('arrow')}</a></p></div>` : ''}
-      <div class="unit-block" id="kegiatan"><h2>Kegiatan & Berita</h2><div class="news-grid" style="grid-template-columns:repeat(2,1fr)" id="unitNews"></div>
+      <div class="unit-block" id="kegiatan"><h2>Kegiatan & Berita</h2><div class="news-grid two" id="unitNews"></div>
         <p style="margin-top:20px"><a class="link-arrow" href="/berita?unit=${esc(slug)}">Semua berita ${esc(unit.short || unit.name)} ${icon('arrow')}</a></p></div>
       <div class="unit-block" id="agenda"><h2>Agenda</h2><div class="agenda-list" id="unitAgenda"></div></div>
       <div class="unit-block" id="galeri"><h2>Galeri</h2><div class="gal-grid" id="unitGal" style="columns:3 180px"></div></div>

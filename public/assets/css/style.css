@@ -770,3 +770,17 @@ select.chip-btn { appearance: auto; padding-right: 10px; }
   .pc-foot .btn { justify-content: center; }
 }
 @media (max-width: 380px) { .prod-grid { grid-template-columns: 1fr; } }
+
+/* Perbaikan tampilan HP: agenda & daftar berita unit */
+.news-grid.two { grid-template-columns: repeat(2, 1fr); }
+.agenda-body { min-width: 0; overflow-wrap: anywhere; }
+.agenda-body p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 860px) {
+  .duo, .news-grid.two { grid-template-columns: 1fr; }
+  .duo > * { min-width: 0; }
+}
+@media (max-width: 480px) {
+  .agenda-item { grid-template-columns: 68px 1fr; gap: 14px; }
+  .agenda-date b { font-size: 1.9rem; }
+  .agenda-body { padding: 12px 14px 12px 0; }
+}
