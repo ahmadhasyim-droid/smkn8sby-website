@@ -945,9 +945,16 @@ export async function onRequest(ctx) {
     // ===== PROFIL GURU (publik) =====
     if (method === 'GET' && parts[0] === 'guru') {
       if (!parts[1]) {
-        const rows = await db.prepare(`SELECT p.slug,p.full_name,p.position,p.unit_slug,p.subjects,p.photo,p.skills FROM teacher_profiles p JOIN users u ON u.id=p.user_id
-          WHERE ${PUBLIC_PROFILE} ORDER BY p.full_name COLLATE NOCASE`).all();
-        return json({ items: rows.results }, 200, { 'Cache-Control': 'public, max-age=60' });
+        // Semua akun guru aktif tampil. Isi profil (foto, bidang, keahlian) hanya dikirim untuk profil yang dipublikasikan;
+        // profil privat cukup nama & jabatan dari akun (sudah tampil sebagai penulis artikel).
+        const rows = (await db.prepare(`SELECT u.id,u.name,u.title,p.slug,p.full_name,p.position,p.unit_slug,p.subjects,p.photo,p.skills,
+          CASE WHEN p.visibility='public' AND p.hidden=0 THEN 1 ELSE 0 END pub
+          FROM users u LEFT JOIN teacher_profiles p ON p.user_id=u.id WHERE u.role='guru' AND u.active=1`).all()).results;
+        const items = rows.map((r) => (r.pub
+          ? { public: 1, slug: r.slug, full_name: r.full_name, position: r.position, unit_slug: r.unit_slug, subjects: r.subjects, photo: r.photo, skills: r.skills }
+          : { public: 0, key: r.id, full_name: r.name || 'Guru SMKN 8 Surabaya', position: r.title || '' }))
+          .sort((x, y) => y.public - x.public || x.full_name.localeCompare(y.full_name, 'id', { sensitivity: 'base' }));
+        return json({ items, publicCount: items.filter((x) => x.public).length }, 200, { 'Cache-Control': 'public, max-age=60' });
       }
       const p = await db.prepare(`SELECT p.*, u.active, u.role FROM teacher_profiles p JOIN users u ON u.id=p.user_id WHERE p.slug=?`).bind(parts[1]).first();
       const pub = p && p.visibility === 'public' && !p.hidden && p.active && p.role === 'guru';

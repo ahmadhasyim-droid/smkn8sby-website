@@ -265,3 +265,11 @@ td.act .btn + .btn { margin-left: 4px; }
   .cv-item .fields { padding-right: 0; padding-top: 30px; }
   .cv-item .field.half { grid-column: span 2; }
 }
+.cv-dl { display: flex; gap: 14px; align-items: flex-start; }
+.cv-dl > div { display: grid; gap: 4px; }
+.cv-dl > div > b { font-size: 1.05rem; }
+.cv-dl span { color: var(--muted); font-size: .9rem; line-height: 1.55; }
+.cv-dl a { color: var(--blue); font-weight: 700; }
+.cv-ic { width: 46px; height: 46px; border-radius: 10px; background: #fdeee7; color: #d9481f; display: grid; place-items: center; flex: none; }
+.cv-ic .ico { width: 24px; height: 24px; }
+.field .inline small { color: var(--muted); font-weight: 500; }

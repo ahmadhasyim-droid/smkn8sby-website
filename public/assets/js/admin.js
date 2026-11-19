@@ -380,7 +380,7 @@ const RES = {
 
 // ---------- Kerangka panel ----------
 function menu() {
-  if (isGuru()) return [['Menulis', [['dashboard', 'Dasbor', 'dash'], ['posts', 'Tulisan Saya', 'pen']]], ['Profil', [['profil', 'Profil / CV Saya', 'idcard']]]];
+  if (isGuru()) return [['Menulis', [['dashboard', 'Dasbor', 'dash'], ['posts', 'Tulisan Saya', 'pen']]], ['Profil', [['profil', 'Profil / CV Saya', 'idcard'], ['cv', 'Download CV (PDF)', 'dl']]]];
   const u = ME.unit_slug, items = [['dashboard', 'Dasbor', 'dash'], ['posts', 'Berita & Kegiatan', 'news'], ['agenda', 'Agenda', 'cal'], ['gallery', 'Galeri', 'img'], ['prestasi', 'Prestasi Siswa', 'trophy']];
   if (isAdmin() || UNIT[u]?.type === 'waka') items.splice(1, 0, ['program', 'Program Sekolah', 'clip']);
   if (canReview()) items.splice(1, 0, ['review', 'Persetujuan Tulisan', 'check']);
@@ -411,7 +411,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 24</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 26</span>
       </div>
     </aside>
     <div class="main">
@@ -788,7 +788,7 @@ function profileCard(p) {
   return `<div class="box prof-card"><div class="pc-l"><span class="pc-ic">${ic('idcard')}</span><div><b>Profil / CV Saya</b>
     <span>${!p ? 'Belum diisi. Lengkapi profil Anda: foto, pendidikan, keahlian & sertifikat kompetensi, prestasi.' : p.hidden ? 'Profil sedang disembunyikan oleh admin.' : pub ? 'Profil Anda <b>tampil di website</b>.' : 'Profil Anda masih <b>privat</b> (hanya Anda & admin yang bisa melihat).'}</span>
     <div class="meter"><i style="width:${c}%"></i></div><small>Kelengkapan ${c}%</small></div></div>
-    <div class="pc-r"><a class="btn btn-primary btn-sm" href="#/profil">${ic('pen')}${p ? 'Perbarui profil' : 'Isi profil'}</a>${p ? `<a class="btn btn-line btn-sm" href="/guru/${encodeURIComponent(p.slug)}" target="_blank">${ic('eye')}Lihat</a>` : ''}</div></div>`;
+    <div class="pc-r"><a class="btn btn-primary btn-sm" href="#/profil">${ic('pen')}${p ? 'Perbarui profil' : 'Isi profil'}</a>${p ? `<a class="btn btn-line btn-sm" href="/guru/${encodeURIComponent(p.slug)}" target="_blank">${ic('eye')}Lihat</a><a class="btn btn-line btn-sm" href="#/cv">${ic('dl')}Download CV</a>` : ''}</div></div>`;
 }
 function guruDashboard(view, d) {
   const stats = [[d.publish, 'Tulisan tayang', '#16966a'], [d.review, 'Menunggu persetujuan', '#d98a06'], [d.ditolak, 'Perlu revisi', '#d4364b'], [d.draft, 'Draf', '#5a6474'], [d.views, 'Total dibaca', '#235ba4']];
@@ -871,7 +871,7 @@ V.profil = async (view) => {
   const d = await api('admin/profil');
   let p = d.profile, dirty = false;
   const url = () => `/guru/${encodeURIComponent(p.slug)}`;
-  setHead('Profil / CV Saya', `<a class="btn btn-line" id="pvBtn" href="${url()}" target="_blank">${ic('eye')}Lihat profil</a><button class="btn btn-primary" id="saveTop">${ic('check')}Simpan</button>`);
+  setHead('Profil / CV Saya', `<a class="btn btn-line" id="pvBtn" href="${url()}" target="_blank">${ic('eye')}Lihat profil</a><button class="btn btn-line" id="pdfBtn" type="button">${ic('dl')}PDF</button><button class="btn btn-primary" id="saveTop">${ic('check')}Simpan</button>`);
   const vals = { ...p, ...Object.fromEntries(Object.entries(p.links || {}).map(([k, v]) => [`l_${k}`, v])) };
   view.innerHTML = `<form id="pf" class="prof-form" novalidate>
     <div class="box vis-box">
@@ -946,6 +946,177 @@ V.profil = async (view) => {
     btns.forEach((x) => (x.disabled = false));
   };
   form.onsubmit = save; $('#saveTop').onclick = save;
+  $('#pdfBtn').onclick = async (e) => {
+    const btn = e.currentTarget;
+    if (dirty) { if (!confirm('Ada perubahan yang belum disimpan. Simpan dulu lalu unduh PDF?')) return; await save(); if (dirty) return; }
+    downloadCv(p, {}, btn);
+  };
+};
+
+// ---------- Unduh CV (PDF) — dibuat di browser, tidak membebani server ----------
+let jsPdfP = null;
+const loadJsPdf = () => (jsPdfP ||= new Promise((ok, no) => {
+  if (window.jspdf) return ok(window.jspdf.jsPDF);
+  const sc = document.createElement('script'); sc.src = '/assets/js/vendor/jspdf-2.5.1.min.js';
+  sc.onload = () => ok(window.jspdf.jsPDF); sc.onerror = () => { jsPdfP = null; no(new Error('Gagal memuat pembuat PDF. Periksa koneksi internet lalu coba lagi.')); };
+  document.head.appendChild(sc);
+}));
+async function imgData(url, max) {
+  try {
+    const r = await fetch(url); if (!r.ok) return null;
+    const bmp = await createImageBitmap(await r.blob());
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height);
+    return { data: c.toDataURL('image/jpeg', 0.82), w: c.width, h: c.height };
+  } catch { return null; }
+}
+const hexRgb = (h) => { const m = String(h || '').match(/^#?([0-9a-f]{6})$/i); const n = parseInt(m ? m[1] : '0f766e', 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+// teks aman untuk font standar PDF (Latin)
+const pdfTxt = (t) => String(t ?? '').normalize('NFC').replace(/[•●]/g, '·').replace(/[^\x20-\x7E\xA0-\xFF–—‘’“”…\n]/g, '').trim();
+async function cvPdf(p, { photo = true, attach = true } = {}) {
+  const JsPDF = await loadJsPdf();
+  const doc = new JsPDF({ unit: 'mm', format: 'a4' });
+  const W = 210, H = 297, M = 18, CW = W - 2 * M;
+  const bid = p.unit_slug === 'umum' ? { name: 'Mata Pelajaran Umum / Adaptif', color: '#475569' } : UNIT[p.unit_slug] && UNIT[p.unit_slug].type === 'jurusan' ? UNIT[p.unit_slug] : null;
+  const C = hexRgb(bid?.color || '#0f766e'), INK = [13, 26, 46], MUT = [90, 100, 116];
+  const cv = p.data || {}, L = p.links || {};
+  let y = 0;
+  const color = (c) => doc.setTextColor(...c);
+  const font = (st = 'normal', sz = 10) => { doc.setFont('helvetica', st); doc.setFontSize(sz); };
+  const room = (h) => { if (y + h > H - 20) { doc.addPage(); y = 20; } };
+  const para = (t, x, w, lh = 4.6) => { const ls = doc.splitTextToSize(pdfTxt(t), w); for (const l of ls) { room(lh); doc.text(l, x, y); y += lh; } };
+  // ----- kepala -----
+  doc.setFillColor(...INK); doc.rect(0, 0, W, 54, 'F');
+  doc.setFillColor(...C); doc.rect(0, 54, W, 2.2, 'F');
+  let tx = M;
+  if (photo && p.photo) {
+    const im = await imgData(p.photo, 500);
+    if (im) {
+      const s = 34;
+      doc.setFillColor(...C); doc.rect(M - 1.2, 10 - 1.2, s + 2.4, s + 2.4, 'F');
+      // potong tengah agar persegi
+      const c = document.createElement('canvas'), z = Math.min(im.w, im.h); c.width = c.height = z;
+      const img = new Image(); img.src = im.data; await img.decode();
+      c.getContext('2d').drawImage(img, (im.w - z) / 2, (im.h - z) / 2, z, z, 0, 0, z, z);
+      doc.addImage(c.toDataURL('image/jpeg', .85), 'JPEG', M, 10, s, s); tx = M + s + 9;
+    }
+  }
+  const tw = W - M - tx;
+  y = 16; color([200, 210, 225]); font('bold', 7.5);
+  doc.text(pdfTxt((bid ? (bid.slug ? 'PROGRAM KEAHLIAN ' : '') + bid.name : 'SMK NEGERI 8 SURABAYA').toUpperCase()), tx, y, { charSpace: .4 });
+  y += 8; color([255, 255, 255]); font('bold', 19);
+  for (const l of doc.splitTextToSize(pdfTxt(p.full_name), tw).slice(0, 2)) { doc.text(l, tx, y); y += 7.5; }
+  font('normal', 10.5); color([225, 232, 242]);
+  for (const l of doc.splitTextToSize(pdfTxt(p.position || 'Guru SMK Negeri 8 Surabaya'), tw).slice(0, 2)) { doc.text(l, tx, y); y += 5; }
+  if (p.subjects) { font('normal', 8.5); color([170, 185, 205]); for (const l of doc.splitTextToSize(pdfTxt('Mengampu: ' + p.subjects), tw).slice(0, 2)) { doc.text(l, tx, y); y += 4.2; } }
+  // kontak
+  const contacts = [p.email && ['Email', p.email, 'mailto:' + p.email], L.website && ['Web', L.website, L.website], L.linkedin && ['LinkedIn', L.linkedin, L.linkedin], L.instagram && ['Instagram', L.instagram, L.instagram], L.youtube && ['YouTube', L.youtube, L.youtube]].filter(Boolean);
+  y = 62; font('normal', 8.3);
+  if (contacts.length) {
+    let cx = M;
+    for (const [lab, val, href] of contacts) {
+      const label = `${lab}: `, v = pdfTxt(val.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''));
+      const wv = doc.getTextWidth(label) + doc.getTextWidth(v) + 7;
+      if (cx + wv > W - M) { cx = M; y += 5; }
+      color(MUT); doc.text(label, cx, y); color([35, 91, 164]); doc.textWithLink(v, cx + doc.getTextWidth(label), y, { url: href }); cx += wv;
+    }
+    y += 8;
+  }
+  // ringkasan angka
+  const counts = [['kompetensi', 'Sertifikat'], ['prestasi', 'Prestasi'], ['pelatihan', 'Pelatihan'], ['pengalaman', 'Pengalaman']].map(([k, l]) => [(cv[k] || []).length, l]).filter(([n]) => n);
+  if (counts.length) {
+    const bw = CW / counts.length;
+    doc.setDrawColor(222, 227, 235); doc.setLineWidth(.3); doc.line(M, y - 3, W - M, y - 3);
+    counts.forEach(([n, l], i) => { const x = M + i * bw; color(C); font('bold', 15); doc.text(String(n), x, y + 4); const nw = doc.getTextWidth(String(n)); color(MUT); font('normal', 8); doc.text(l, x + nw + 2.2, y + 3.6); });
+    y += 10; doc.line(M, y - 2, W - M, y - 2); y += 4;
+  }
+  // ----- bagian -----
+  const head = (t) => { room(28); y += 3; doc.setFillColor(...C); doc.rect(M, y - 3.6, 1.6, 4.6, 'F'); color(INK); font('bold', 11.5); doc.text(pdfTxt(t).toUpperCase(), M + 4, y, { charSpace: .25 }); y += 2.5; doc.setDrawColor(222, 227, 235); doc.setLineWidth(.3); doc.line(M, y, W - M, y); y += 6; };
+  const item = (title, meta, desc, link, right) => {
+    const lt = doc.splitTextToSize(pdfTxt(title), CW - (right ? 34 : 0));
+    room(lt.length * 4.8 + (meta ? 4.4 : 0) + 3);
+    if (right) { color(C); font('bold', 8.3); doc.text(pdfTxt(right), W - M, y, { align: 'right' }); }
+    color(INK); font('bold', 10); lt.forEach((l) => { doc.text(l, M, y); y += 4.8; });
+    if (meta) { color(MUT); font('normal', 8.8); para(meta, M, CW, 4.3); }
+    if (desc) { color([52, 65, 85]); font('normal', 9); para(desc, M, CW, 4.4); }
+    if (link) { color([35, 91, 164]); font('normal', 8.3); room(4.4); const v = pdfTxt(link.replace(/^https?:\/\//, '')); doc.textWithLink('Bukti: ' + (v.length > 80 ? v.slice(0, 78) + '…' : v), M, y, { url: link }); y += 4.4; }
+    y += 2.8;
+  };
+  const yrs = (a, b) => [a, b || (a ? 'sekarang' : '')].filter(Boolean).join(' – ');
+  const j = (...a) => a.filter(Boolean).join(' · ');
+  if (p.bio) { head('Tentang'); color([52, 65, 85]); font('normal', 9.6); para(p.bio, M, CW, 4.9); y += 2; }
+  const sk = String(p.skills || '').split(',').map((x) => pdfTxt(x)).filter(Boolean);
+  if (sk.length) {
+    head('Keahlian Utama'); font('bold', 8.6); let x = M; room(8);
+    for (const t of sk) {
+      const w = doc.getTextWidth(t) + 7;
+      if (x + w > W - M) { x = M; y += 8; room(8); }
+      doc.setFillColor(...C.map((v) => Math.round(v + (255 - v) * .86))); doc.roundedRect(x, y - 4.4, w, 6.4, 3.2, 3.2, 'F');
+      color(C.map((v) => Math.round(v * .7))); doc.text(t, x + 3.5, y); x += w + 2.5;
+    }
+    y += 9;
+  }
+  const S = (k) => cv[k] || [];
+  if (S('kompetensi').length) { head('Sertifikat Kompetensi'); S('kompetensi').forEach((it) => item(it.nama, j(it.penerbit, it.bidang, it.berlaku && 'berlaku s.d. ' + it.berlaku), '', it.link, it.tahun)); }
+  if (S('pengalaman').length) { head('Pengalaman Kerja & Industri'); S('pengalaman').forEach((it) => item(it.posisi, it.tempat, it.ket, '', yrs(it.mulai, it.selesai))); }
+  if (S('pendidikan').length) { head('Riwayat Pendidikan'); S('pendidikan').forEach((it) => item(j(it.jenjang, it.prodi), it.institusi, '', '', it.tahun && 'Lulus ' + it.tahun)); }
+  if (S('prestasi').length) { head('Prestasi & Penghargaan'); S('prestasi').forEach((it) => item(it.judul, j(it.tingkat && 'Tingkat ' + it.tingkat, it.penyelenggara), '', it.link, it.tahun)); }
+  if (S('pelatihan').length) { head('Pelatihan, Diklat & Workshop'); S('pelatihan').forEach((it) => item(it.nama, j(it.penyelenggara, it.jp && it.jp + ' JP'), '', '', it.tahun)); }
+  if (S('karya').length) { head('Karya, Publikasi & Produk'); S('karya').forEach((it) => item(it.judul, it.jenis, '', it.link, it.tahun)); }
+  if (S('organisasi').length) { head('Organisasi & Kepanitiaan'); S('organisasi').forEach((it) => item(it.nama, it.peran, '', '', it.tahun)); }
+  // ----- lampiran bukti -----
+  const proofs = attach ? [...S('kompetensi').map((it) => [it.gambar, it.nama]), ...S('prestasi').map((it) => [it.gambar, it.judul])].filter(([g]) => g) : [];
+  if (proofs.length) {
+    doc.addPage(); y = 20; head('Lampiran: Bukti Sertifikat & Prestasi');
+    const cw = (CW - 8) / 2; let col = 0, rowH = 0;
+    for (const [g, cap] of proofs) {
+      const im = await imgData(g, 1100); if (!im) continue;
+      const ih = Math.min(cw * im.h / im.w, 95), iw = ih * im.w / im.h;
+      if (col === 0) room(ih + 12);
+      const x = M + col * (cw + 8);
+      doc.setDrawColor(222, 227, 235); doc.rect(x, y, cw, ih, 'S');
+      doc.addImage(im.data, 'JPEG', x + (cw - iw) / 2, y, iw, ih);
+      color(MUT); font('normal', 8); doc.text(doc.splitTextToSize(pdfTxt(cap), cw).slice(0, 2), x, y + ih + 4.5);
+      rowH = Math.max(rowH, ih + 13);
+      if (++col === 2) { col = 0; y += rowH; rowH = 0; }
+    }
+  }
+  // ----- kaki halaman -----
+  const n = doc.getNumberOfPages(), url = `smkn8-sby.sch.id/guru/${p.slug || ''}`;
+  const tgl = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' });
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i); doc.setDrawColor(222, 227, 235); doc.setLineWidth(.3); doc.line(M, H - 13, W - M, H - 13);
+    font('normal', 7.5); color(MUT);
+    doc.text(pdfTxt(`CV ${p.full_name} · SMK Negeri 8 Surabaya · dicetak ${tgl}`), M, H - 8.5);
+    doc.text(`Halaman ${i} dari ${n}`, W - M, H - 8.5, { align: 'right' });
+  }
+  doc.setProperties({ title: `CV ${pdfTxt(p.full_name)}`, subject: 'Curriculum Vitae', author: pdfTxt(p.full_name), creator: 'Website SMK Negeri 8 Surabaya' });
+  const fname = 'CV-' + (pdfTxt(p.full_name).replace(/,.*$/, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'Guru') + '.pdf';
+  doc.save(fname);
+  return fname;
+}
+async function downloadCv(p, opts, btn) {
+  const old = btn?.innerHTML; if (btn) { btn.disabled = true; btn.innerHTML = 'Menyiapkan PDF…'; }
+  try { const f = await cvPdf(p, opts); toast(`CV diunduh: ${f}`); }
+  catch (e) { toast(e.message || 'Gagal membuat PDF', true); }
+  if (btn) { btn.disabled = false; btn.innerHTML = old; }
+}
+
+V.cv = async (view) => {
+  setHead('Download CV (PDF)');
+  const d = await api('admin/profil'); const p = d.profile;
+  const nProof = ['kompetensi', 'prestasi'].reduce((a, k) => a + (p.data?.[k] || []).filter((x) => x.gambar).length, 0);
+  view.innerHTML = `<div class="box" style="max-width:720px">
+    <div class="cv-dl"><span class="cv-ic">${ic('dl')}</span><div><b>CV ${esc(p.full_name)}</b><span>Format PDF ukuran A4, dibuat dari data menu <a href="#/profil">Profil / CV Saya</a> yang sudah disimpan. Bisa diunduh kapan saja, walaupun profil masih <b>Privat</b>.</span></div></div>
+    ${p.completeness < 60 ? `<div class="notice bad" style="margin:16px 0 0">Profil Anda baru ${p.completeness}% lengkap. Lengkapi dulu pendidikan, keahlian & sertifikat, dan pengalaman agar CV lebih meyakinkan. <a href="#/profil" style="font-weight:700">Lengkapi profil →</a></div>` : ''}
+    <div class="fields" style="margin-top:18px">
+      <div class="field"><label class="inline"><input type="checkbox" id="oPhoto"${p.photo ? ' checked' : ' disabled'}> Sertakan foto profil${p.photo ? '' : ' <small>(belum ada foto)</small>'}</label></div>
+      <div class="field"><label class="inline"><input type="checkbox" id="oAttach"${nProof ? ' checked' : ' disabled'}> Sertakan lampiran foto bukti sertifikat & prestasi${nProof ? ` <small>(${nProof} gambar, di halaman terakhir)</small>` : ' <small>(belum ada foto bukti)</small>'}</label></div>
+    </div>
+    <div class="form-actions" style="justify-content:flex-start"><button class="btn btn-primary" id="dl">${ic('dl')}Download CV (PDF)</button><a class="btn btn-line" href="/guru/${encodeURIComponent(p.slug)}" target="_blank">${ic('eye')}Lihat versi web</a></div>
+  </div>`;
+  $('#dl').onclick = (e) => downloadCv(p, { photo: $('#oPhoto').checked, attach: $('#oAttach').checked }, e.currentTarget);
 };
 
 V['profil-guru'] = async (view) => {
@@ -966,7 +1137,10 @@ V['profil-guru'] = async (view) => {
       <td>${r.unit_slug && UNIT[r.unit_slug] ? unitTag(r.unit_slug) : r.unit_slug === 'umum' ? '<span class="tag" style="--c:#5a6474">Umum</span>' : '-'}</td>
       <td style="min-width:120px">${r.slug ? `<div class="meter sm"><i style="width:${r.completeness}%"></i></div><span class="t-sub">${r.completeness}%</span>` : '-'}</td>
       <td style="white-space:nowrap"><span class="tag" style="--c:${c}">${l}</span></td><td class="t-sub">${r.updated_at ? fmtDate(r.updated_at) : '-'}</td>
-      <td style="white-space:nowrap">${r.slug ? `<a class="btn btn-line btn-sm" href="/guru/${encodeURIComponent(r.slug)}" target="_blank">${ic('eye')}Lihat</a> <button class="btn ${r.hidden ? 'btn-line' : 'btn-danger'} btn-sm" data-hide="${r.user_id}" data-v="${r.hidden ? 0 : 1}">${r.hidden ? 'Tampilkan lagi' : 'Sembunyikan'}</button>` : ''}</td></tr>`; }).join('') : '<tr><td colspan="6"><div class="empty">Tidak ada data.</div></td></tr>';
+      <td style="white-space:nowrap">${r.slug ? `<a class="btn btn-line btn-sm" href="/guru/${encodeURIComponent(r.slug)}" target="_blank">${ic('eye')}Lihat</a> <button class="btn btn-line btn-sm" data-pdf="${esc(r.slug)}">${ic('dl')}PDF</button> <button class="btn ${r.hidden ? 'btn-line' : 'btn-danger'} btn-sm" data-hide="${r.user_id}" data-v="${r.hidden ? 0 : 1}">${r.hidden ? 'Tampilkan lagi' : 'Sembunyikan'}</button>` : ''}</td></tr>`; }).join('') : '<tr><td colspan="6"><div class="empty">Tidak ada data.</div></td></tr>';
+    $$('[data-pdf]').forEach((b) => (b.onclick = async () => {
+      try { const g = await api('guru/' + encodeURIComponent(b.dataset.pdf)); downloadCv(g.profile, {}, b); } catch (e) { toast(e.message, true); }
+    }));
     $$('[data-hide]').forEach((b) => (b.onclick = async () => {
       const hide = b.dataset.v === '1';
       if (hide && !confirm('Sembunyikan profil ini dari website? Guru tetap dapat mengedit profilnya.')) return;
@@ -1218,7 +1392,8 @@ async function route() {
   window.scrollTo(0, 0);
   try {
     if (!a || a === 'dashboard') return await V.dashboard(view);
-    if (isGuru() && a !== 'posts' && a !== 'account' && a !== 'profil') throw new Error('Akun guru hanya dapat membuka menu Tulisan Saya dan Profil / CV Saya.');
+    if (isGuru() && !['posts', 'account', 'profil', 'cv'].includes(a)) throw new Error('Akun guru hanya dapat membuka menu Tulisan Saya dan Profil / CV Saya.');
+    if (a === 'cv') { if (!isGuru()) throw new Error('Menu ini untuk akun guru.'); return await V.cv(view); }
     if (a === 'profil') { if (!isGuru()) throw new Error('Profil / CV hanya untuk akun guru.'); return await V.profil(view); }
     if (a === 'review') { if (!canReview()) throw new Error('Menu ini khusus WMM dan admin.'); return await V.review(view, b); }
     if (a === 'messages' && !isAdmin() && !isBkk()) throw new Error('Menu ini khusus admin, BKK, dan Waka Humas.');

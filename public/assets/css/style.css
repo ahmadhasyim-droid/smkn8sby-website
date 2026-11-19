@@ -902,3 +902,10 @@ select.chip-btn { appearance: auto; padding-right: 10px; }
   .gp-thumb { display: none; }
   .wrap { width: 100%; }
 }
+.g-av.abs svg { width: 100%; height: 100%; display: block; }
+.guru-card.is-private { --c: #94a3b8; cursor: default; }
+.guru-card.is-private::before { background: repeating-linear-gradient(135deg, #e2e8f0 0 10px, #edf1f6 10px 20px); }
+.guru-card.is-private:hover { transform: none; box-shadow: none; border-color: var(--line); }
+.guru-card.is-private b { color: #3b4657; }
+.gc-lock { margin-top: auto; padding-top: 10px; display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 700; color: #64748b; }
+.gc-lock .ico { width: 14px; height: 14px; }

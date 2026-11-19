@@ -1140,9 +1140,23 @@ PAGES.dudi = async (main) => {
 // ---------- Profil Guru (direktori & CV) ----------
 const TINGKAT_C = { Internasional: '#7c4bc4', Nasional: '#d9481f', Provinsi: '#c08a1e', 'Kota/Kabupaten': '#235ba4', Sekolah: '#16966a' };
 const guruBidang = (slug) => (slug === 'umum' ? { name: 'Mapel Umum / Adaptif', short: 'UMUM', color: '#475569' } : UNITS[slug] && UNITS[slug].type === 'jurusan' ? UNITS[slug] : null);
+// Foto bawaan: gambar abstrak (berbeda tiap guru, tetap sama setiap kali dibuka)
+const ABS_COLORS = ['#235ba4', '#f26836', '#16966a', '#7c4bc4', '#d6457e', '#c08a1e', '#1594c4', '#0f766e', '#d9481f'];
+function abstractAvatar(seed, base) {
+  let h = 2166136261; for (const ch of String(seed)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  const rnd = () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909)) >>> 0) / 4294967296;
+  const pick = () => ABS_COLORS[Math.floor(rnd() * ABS_COLORS.length)];
+  const c1 = base || pick(), c2 = pick(), c3 = pick(), id = 'a' + Math.floor(rnd() * 1e9).toString(36);
+  const blob = (c, o) => { const cx = 15 + rnd() * 70, cy = 15 + rnd() * 70, r = 22 + rnd() * 30; return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${c}" opacity="${o}"/>`; };
+  const rot = Math.floor(rnd() * 360);
+  return `<svg viewBox="0 0 100 100" aria-hidden="true" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="${id}" gradientTransform="rotate(${rot} .5 .5)"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="#0d1a2e"/></linearGradient></defs>
+    <rect width="100" height="100" fill="url(#${id})"/>${blob(c2, .75)}${blob(c3, .55)}${blob('#ffffff', .18)}
+    <path d="M${(rnd() * 40).toFixed(0)} 100 Q 50 ${(30 + rnd() * 40).toFixed(0)} 100 ${(40 + rnd() * 60).toFixed(0)} L100 100 Z" fill="#fff" opacity=".12"/></svg>`;
+}
 const guruAvatar = (g, cls = '') => {
   const c = guruBidang(g.unit_slug)?.color || '#0f766e';
-  return g.photo ? `<span class="g-av ${cls}" style="--c:${c}"><img src="${esc(g.photo)}" alt="Foto ${esc(g.full_name)}" loading="lazy"></span>` : `<span class="g-av ${cls}" style="--c:${c}"><i>${esc(nameInitials(g.full_name))}</i></span>`;
+  return g.photo ? `<span class="g-av ${cls}" style="--c:${c}"><img src="${esc(g.photo)}" alt="Foto ${esc(g.full_name)}" loading="lazy"></span>`
+    : `<span class="g-av abs ${cls}" style="--c:${c}">${abstractAvatar(g.slug || g.key || g.full_name, g.unit_slug && guruBidang(g.unit_slug)?.color)}</span>`;
 };
 PAGES.guru = async (main) => {
   const slug = decodeURIComponent(location.pathname.split('/').filter(Boolean)[1] || '');
@@ -1159,20 +1173,23 @@ async function guruDirectory(main) {
     <div class="guru-grid" id="gList"><div class="empty">Memuat…</div></div>
   </div></section>`;
   const { items } = await api('guru');
-  const count = (v) => items.filter((g) => g.unit_slug === v).length;
-  $('#fBid').innerHTML = [['', 'Semua guru', '#0d1a2e'], ...jur.map((u) => [u.slug, u.name, u.color]), ['umum', 'Mapel Umum / Adaptif', '#475569']]
+  const count = (v) => (v === 'publik' ? items.filter((g) => g.public).length : items.filter((g) => g.public && g.unit_slug === v).length);
+  $('#fBid').innerHTML = [['', 'Semua guru', '#0d1a2e'], ['publik', 'Profil terbuka', '#16966a'], ...jur.map((u) => [u.slug, u.name, u.color]), ['umum', 'Mapel Umum / Adaptif', '#475569']]
     .map(([v, l, c]) => `<button class="chip-btn${v === bid ? ' on' : ''}" data-v="${v}"><span class="dot" style="--c:${c}"></span>${esc(l)} <small>${v ? count(v) : items.length}</small></button>`).join('');
   const draw = () => {
     const k = q.toLowerCase();
-    const list = items.filter((g) => (!bid || g.unit_slug === bid) && (!k || `${g.full_name} ${g.position || ''} ${g.subjects || ''} ${g.skills || ''}`.toLowerCase().includes(k)));
+    const list = items.filter((g) => (!bid || (bid === 'publik' ? g.public : g.public && g.unit_slug === bid)) && (!k || `${g.full_name} ${g.position || ''} ${g.subjects || ''} ${g.skills || ''}`.toLowerCase().includes(k)));
     $('#gCount').textContent = `${list.length} guru`;
     $('#gList').innerHTML = list.length ? list.map((g) => { const b = guruBidang(g.unit_slug); const sk = String(g.skills || '').split(',').map((x) => x.trim()).filter(Boolean);
+      if (!g.public) return `<div class="guru-card is-private" title="Profil guru ini belum dipublikasikan oleh pemiliknya">${guruAvatar(g)}
+        <b>${esc(g.full_name)}</b><span class="gc-pos">${esc(g.position || 'Guru SMK Negeri 8 Surabaya')}</span>
+        <span class="gc-lock">${icon('lock')}Profil diprivat</span></div>`;
       return `<a class="guru-card" href="/guru/${encodeURIComponent(g.slug)}" style="--c:${b?.color || '#0f766e'}">${guruAvatar(g)}
         <b>${esc(g.full_name)}</b><span class="gc-pos">${esc(g.position || 'Guru SMK Negeri 8 Surabaya')}</span>
         ${b ? `<span class="badge soft" style="--c:${b.color}">${esc(b.short || b.name)}</span>` : ''}
         ${sk.length ? `<span class="gc-skills">${sk.slice(0, 3).map((x) => `<i>${esc(x)}</i>`).join('')}${sk.length > 3 ? `<i>+${sk.length - 3}</i>` : ''}</span>` : ''}
         <span class="gc-more">Lihat profil ${icon('arrow')}</span></a>`; }).join('')
-      : `<div style="grid-column:1/-1">${items.length ? empty('Tidak ada guru yang cocok dengan pencarian.') : empty('Profil guru akan tampil di sini setelah Bapak/Ibu guru mengisi dan mempublikasikan profilnya.')}</div>`;
+      : `<div style="grid-column:1/-1">${items.length ? empty(bid ? 'Belum ada profil terbuka untuk pilihan ini.' : 'Tidak ada guru yang cocok dengan pencarian.') : empty('Daftar guru belum tersedia.')}</div>`;
     history.replaceState(null, '', '/guru' + (bid ? '?bidang=' + bid : ''));
   };
   $('#fBid').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; bid = b.dataset.v; $$('#fBid button').forEach((x) => x.classList.toggle('on', x === b)); draw(); };
@@ -1184,7 +1201,7 @@ async function guruProfile(main, slug) {
   try { d = await api('guru/' + encodeURIComponent(slug)); }
   catch (e) {
     setTitle('Profil guru');
-    main.innerHTML = `${pageHero('Profil tidak tersedia', 'Profil guru ini tidak ditemukan atau belum dipublikasikan oleh pemiliknya.', ['Profil Guru'])}
+    main.innerHTML = `${pageHero('Profil diprivat', 'Profil guru ini belum dipublikasikan oleh pemiliknya, atau alamatnya tidak ditemukan.', ['Profil Guru'])}
     <section class="section"><div class="wrap"><a class="btn btn-dark" href="/guru">Lihat semua profil guru ${icon('arrow')}</a></div></section>`;
     return;
   }
