@@ -225,7 +225,7 @@ function bindImageTools(ed, area) {
 let docImportP = null;
 const loadDocImport = () => (docImportP ||= new Promise((ok, no) => {
   if (window.DocImport) return ok(window.DocImport);
-  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=28';
+  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=29';
   sc.onload = () => ok(window.DocImport); sc.onerror = () => { docImportP = null; no(new Error('Gagal memuat fitur impor. Periksa koneksi lalu coba lagi.')); };
   document.head.appendChild(sc);
 }));
@@ -513,7 +513,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 28</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 29</span>
       </div>
     </aside>
     <div class="main">
@@ -778,6 +778,11 @@ V.settings = async (view) => {
     ['Notifikasi email pesan masuk', [
       { k: 'notif_email', label: 'Kirim salinan setiap pesan masuk ke email', type: 'text', placeholder: 'email@smkn8-sby.sch.id', help: 'Boleh lebih dari satu, pisahkan dengan koma (maks. 5). Kosongkan untuk mematikan.' },
       { k: 'notif_from', label: 'Alamat pengirim', type: 'text', placeholder: 'noreply@smkn8-sby.sch.id', help: 'Harus memakai domain yang sudah diverifikasi di Resend (lihat README bagian "Notifikasi email").' },
+    ]],
+    ['Layanan Pengaduan (WhatsApp)', [
+      { k: 'show_pengaduan', label: 'Tombol pengaduan di website', type: 'select', half: true, opts: () => [{ v: '1', l: 'Tampilkan' }, { v: '0', l: 'Sembunyikan' }], help: 'Ikon petugas melayang di pojok kanan bawah setiap halaman.' },
+      { k: 'pengaduan_wa', label: 'Nomor WhatsApp penerima', half: true, placeholder: '628113410120', help: 'Format 62…, tanpa tanda + atau spasi.' },
+      { k: 'pengaduan_nama', label: 'Nama petugas yang tampil', half: true, placeholder: 'Bu Ita (Humas)' },
     ]],
     ['Kontak & media sosial', [
       { k: 'address', label: 'Alamat' }, { k: 'maps_query', label: 'Kata kunci peta Google Maps', help: 'Nama/alamat sekolah persis seperti di Google Maps.' },

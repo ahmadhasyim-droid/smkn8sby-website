@@ -1293,6 +1293,80 @@ PAGES.perpustakaan = async (main) => {
 };
 
 // ---------- Mulai ----------
+// ---------- Layanan Pengaduan via WhatsApp (tombol petugas melayang) ----------
+const OPERATOR_SVG = `<svg viewBox="0 0 120 120" aria-hidden="true">
+  <defs><clipPath id="opClip"><circle cx="60" cy="60" r="58"/></clipPath></defs>
+  <circle cx="60" cy="60" r="58" fill="#e8f4ff"/>
+  <g clip-path="url(#opClip)">
+    <path d="M18 122c2-24 20-36 42-36s40 12 42 36z" fill="#235ba4"/>
+    <path d="M47 88l13 14 13-14" fill="#fff"/><path d="M56 96h8l-2 14h-4z" fill="#f26836"/>
+    <rect x="52" y="74" width="16" height="16" rx="6" fill="#f2c4a0"/>
+    <path d="M32 54c0-20 12-32 28-32s28 12 28 32c0 6-1 12-3 16H35c-2-4-3-10-3-16z" fill="#2b2118"/>
+    <ellipse cx="60" cy="58" rx="22" ry="25" fill="#f8d2b0"/>
+    <path d="M37 52c4-14 14-20 26-20 10 0 18 6 21 16-8-2-16-6-21-12-5 8-14 14-26 16z" fill="#2b2118"/>
+    <ellipse cx="51" cy="60" rx="2.6" ry="3.2" fill="#2b2118"/><ellipse cx="69" cy="60" rx="2.6" ry="3.2" fill="#2b2118"/>
+    <circle cx="46" cy="68" r="3.4" fill="#f4a3a3" opacity=".7"/><circle cx="74" cy="68" r="3.4" fill="#f4a3a3" opacity=".7"/>
+    <path d="M53 71q7 6 14 0" stroke="#b5483a" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+    <path d="M34 58c0-18 11-29 26-29s26 11 26 29" stroke="#0d1a2e" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+    <rect x="29" y="53" width="10" height="16" rx="4" fill="#0d1a2e"/><rect x="81" y="53" width="10" height="16" rx="4" fill="#0d1a2e"/>
+    <path d="M86 66c0 10-6 15-16 15" stroke="#0d1a2e" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <rect x="62" y="77" width="10" height="7" rx="3.5" fill="#0d1a2e"/>
+  </g>
+</svg>`;
+function mountPengaduan() {
+  const s = SITE.settings;
+  const num = String(s.pengaduan_wa || '').replace(/\D/g, '');
+  if (s.show_pengaduan === '0' || num.length < 9) return;
+  const nama = s.pengaduan_nama || 'Humas';
+  const wrap = document.createElement('div');
+  wrap.className = 'pgd';
+  wrap.innerHTML = `
+    <div class="pgd-panel" id="pgdPanel" role="dialog" aria-modal="false" aria-labelledby="pgdTitle" hidden>
+      <div class="pgd-head"><span class="pgd-av">${OPERATOR_SVG}</span><div><b id="pgdTitle">Layanan Pengaduan</b><small><i class="pgd-dot"></i>Dilayani ${esc(nama)} via WhatsApp</small></div>
+        <button type="button" class="pgd-x" data-pgd-close aria-label="Tutup">×</button></div>
+      <form class="pgd-body" id="pgdForm" novalidate>
+        <p class="pgd-hello">Halo! 👋 Sampaikan keluhan, saran, atau laporan Anda. Pesan akan dikirim langsung ke WhatsApp Humas SMK Negeri 8 Surabaya.</p>
+        <label><span>Nama <small>(opsional)</small></span><input name="nama" maxlength="80" autocomplete="name" placeholder="Nama Anda"></label>
+        <div class="pgd-row">
+          <label>Saya adalah<select name="peran"><option>Orang tua / wali</option><option>Siswa</option><option>Alumni</option><option>Masyarakat umum</option><option>Mitra / DUDI</option><option>Lainnya</option></select></label>
+          <label>Kategori<select name="kategori"><option>Layanan administrasi</option><option>Pembelajaran</option><option>Sarana & prasarana</option><option>Kedisiplinan & keamanan</option><option>Kritik & saran</option><option>Lainnya</option></select></label>
+        </div>
+        <label>Isi pengaduan<textarea name="isi" rows="4" maxlength="1500" required placeholder="Ceritakan secara singkat dan jelas…"></textarea></label>
+        <button class="pgd-send" type="submit">${icon('wa')}Kirim via WhatsApp</button>
+        <p class="pgd-note">Mohon gunakan bahasa yang sopan. Jangan mengirim data pribadi yang sensitif (mis. nomor KTP/rekening). Waspada penipuan: sekolah tidak pernah meminta transfer dana melalui layanan ini.</p>
+      </form>
+    </div>
+    <span class="pgd-tip" id="pgdTip">Ada keluhan? <b>Sampaikan di sini</b></span>
+    <button type="button" class="pgd-fab" id="pgdFab" aria-controls="pgdPanel" aria-expanded="false" aria-label="Layanan Pengaduan via WhatsApp">
+      ${OPERATOR_SVG}<span class="pgd-wa">${icon('wa')}</span>
+    </button>`;
+  document.body.appendChild(wrap);
+  const panel = $('#pgdPanel'), fab = $('#pgdFab'), tip = $('#pgdTip');
+  const open = (v) => {
+    panel.hidden = !v; fab.setAttribute('aria-expanded', String(v)); wrap.classList.toggle('open', v); tip.classList.remove('show');
+    if (v) setTimeout(() => $('textarea', panel).focus(), 50);
+  };
+  fab.onclick = () => open(panel.hidden);
+  fab.onmouseenter = () => { if (panel.hidden) tip.classList.add('show'); };
+  fab.onmouseleave = () => tip.classList.remove('show');
+  $('[data-pgd-close]', panel).onclick = () => { open(false); fab.focus(); };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) { open(false); fab.focus(); } });
+  document.addEventListener('click', (e) => { if (!panel.hidden && !wrap.contains(e.target)) open(false); });
+  // tampilkan sapaan singkat sekali per kunjungan
+  let seen = false; try { seen = sessionStorage.getItem('pgdTip') === '1'; sessionStorage.setItem('pgdTip', '1'); } catch { /* abaikan */ }
+  if (!seen) { setTimeout(() => tip.classList.add('show'), 2500); setTimeout(() => tip.classList.remove('show'), 9500); }
+  $('#pgdForm').onsubmit = (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target), isi = String(f.get('isi') || '').trim();
+    if (isi.length < 10) { $('textarea', panel).focus(); $('textarea', panel).setCustomValidity('Mohon tuliskan pengaduan minimal 10 karakter.'); $('textarea', panel).reportValidity(); return; }
+    const text = `Assalamu'alaikum ${nama.replace(/\s*\(.*\)\s*/, '')}, saya ingin menyampaikan *pengaduan* melalui website SMK Negeri 8 Surabaya.\n\n` +
+      `*Nama:* ${String(f.get('nama') || '').trim() || '-'}\n*Sebagai:* ${f.get('peran')}\n*Kategori:* ${f.get('kategori')}\n\n*Isi pengaduan:*\n${isi}\n\n_Dikirim dari halaman: ${location.href}_`;
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    e.target.reset(); open(false);
+  };
+  $('textarea', panel).oninput = (e) => e.target.setCustomValidity('');
+}
+
 (async () => {
   const main = $('#main');
   try {
@@ -1303,6 +1377,7 @@ PAGES.perpustakaan = async (main) => {
     return;
   }
   renderShell();
+  try { mountPengaduan(); } catch (e) { console.error(e); }
   const page = document.body.dataset.page;
   try { await (PAGES[page] || notFound)(main); } catch (e) { console.error(e); }
 })();
