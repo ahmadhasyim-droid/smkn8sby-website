@@ -981,3 +981,13 @@ select.chip-btn { appearance: auto; padding-right: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .pgd-fab { animation: none; } }
 @media print { .pgd { display: none !important; } }
+/* pemisah Berita & Kegiatan vs Opini & Artikel Guru */
+.notice-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; background: #eef7f5; border: 1px solid #cfe8e2; border-radius: 10px; padding: 12px 16px; margin-bottom: 28px; font-size: .92rem; color: #23453e; }
+.notice-line .ico { width: 18px; height: 18px; color: #0f766e; flex: none; }
+.notice-line span { flex: 1; min-width: 200px; }
+.notice-line a { font-weight: 700; color: #0f766e; }
+.notice-line span a { text-decoration: underline; }
+.home-guru { margin-top: 48px; padding-top: 32px; border-top: 1px dashed var(--line); }
+.hg-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.hg-head h3 { display: flex; align-items: center; gap: 10px; font-size: 1.3rem; font-weight: 800; font-stretch: 88%; text-transform: uppercase; margin: 0; }
+.hg-head h3 .ico { width: 22px; height: 22px; color: #0f766e; }

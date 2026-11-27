@@ -472,6 +472,8 @@ PAGES.home = async (main) => {
   <section class="section"><div class="wrap">
     ${secHead('05', 'Kabar Terbaru', 'Berita & Kegiatan', '', `<a class="link-arrow" href="/berita">Semua berita ${icon('arrow')}</a>`)}
     <div class="news-grid" id="homeNews">${'<div class="skel" style="height:320px"></div>'.repeat(3)}</div>
+    <div class="home-guru"><div class="hg-head"><h3>${icon('user')}Opini & Artikel Guru</h3><a class="link-arrow" href="/berita?kategori=tulisan-guru">Semua tulisan guru ${icon('arrow')}</a></div>
+      <div class="news-grid" id="homeGuru">${'<div class="skel" style="height:260px"></div>'.repeat(3)}</div></div>
   </div></section>
 
   ${s.show_youtube !== '0' && s.youtube ? `<section class="section dark yt-sec"><div class="wrap">
@@ -508,9 +510,14 @@ PAGES.home = async (main) => {
   if ($('#homeYT')) renderYouTube($('#homeYT'));
   if ($('#homeIG')) renderInstagram($('#homeIG'));
   const [news, agenda, gal, low, sk] = await Promise.all([
-    api('posts?limit=6'), api('agenda?upcoming=1&limit=4'), api('gallery?limit=6'), api('lowongan?status=buka&limit=4'), api('skema'),
+    api('posts?limit=6&category=kabar'), api('agenda?upcoming=1&limit=4'), api('gallery?limit=6'), api('lowongan?status=buka&limit=4'), api('skema'),
   ]).catch(() => [{ items: [] }, { items: [] }, { items: [] }, { items: [] }, { items: [] }]);
   $('#homeNews').innerHTML = news.items.length ? news.items.map((p, i) => postCard(p, i === 0)).join('') : empty('Belum ada berita.');
+  api('posts?limit=3&category=tulisan-guru').then((g) => { // tulisan guru tampil di bagian tersendiri
+    const box = $('#homeGuru'); if (!box) return;
+    if (!g.items.length) { box.closest('.home-guru').remove(); return; }
+    box.innerHTML = g.items.map((p) => postCard(p)).join('');
+  }).catch(() => $('#homeGuru')?.closest('.home-guru')?.remove());
   $('#homeAgenda').innerHTML = agenda.items.length ? agenda.items.map((a) => agendaItem(a)).join('') : empty('Belum ada agenda terdekat.');
   $('#homeGal').innerHTML = gal.items.length ? gal.items.map((g) => `<a href="${esc(g.image)}" data-lightbox="${esc(g.image)}" data-caption="${esc(g.caption || '')}"><img src="${esc(g.image)}" alt="${esc(g.caption || 'Foto kegiatan')}" loading="lazy"></a>`).join('') : `<div style="grid-column:1/-1">${empty('Foto kegiatan akan tampil di sini.')}</div>`;
   const bkk = UNITS.bkk, lsp = UNITS.lsp;
@@ -800,26 +807,34 @@ const skemaTable = (items, compact) => `<div class="table-wrap"><table class="sk
 
 // ---------- Daftar Berita ----------
 PAGES.berita = async (main) => {
-  setTitle('Berita & Kegiatan');
   let unit = params.get('unit') || '', cat = params.get('kategori') || '', q = params.get('q') || '', page = +params.get('page') || 1;
-  const units = [SCHOOL_UNIT, ...Object.values(UNITS)];
-  main.innerHTML = `${pageHero('Berita & Kegiatan', 'Kabar terbaru dari sekolah, program keahlian, LSP, dan BKK.', ['Berita'])}
+  // Dua halaman terpisah: "Berita & Kegiatan" (kabar sekolah/unit) dan "Opini & Artikel Guru" (tulisan guru yang disetujui WMM)
+  const guruMode = cat === 'tulisan-guru' || GURU_CATS.includes(cat);
+  if (!guruMode && cat === '') cat = 'kabar';
+  setTitle(guruMode ? 'Opini & Artikel Guru' : 'Berita & Kegiatan');
+  main.innerHTML = `${guruMode
+    ? pageHero('Opini & Artikel Guru', 'Opini, tips & tutorial, dan artikel praktis karya Bapak/Ibu guru SMK Negeri 8 Surabaya — diperiksa Waka Manajemen Mutu sebelum tayang.', ['Opini & Artikel Guru'])
+    : pageHero('Berita & Kegiatan', 'Kabar terbaru dari sekolah, program keahlian, LSP, dan BKK.', ['Berita'])}
   <section class="section" style="padding-top:48px"><div class="wrap">
-    <div class="filters" id="fUnit"></div>
+    ${guruMode ? `<div class="notice-line">${icon('user')}<span>Ingin tahu lebih banyak tentang penulisnya? Lihat <a href="/guru">Profil Guru</a>.</span><a href="/berita">← Kembali ke Berita & Kegiatan</a></div>`
+      : `<div class="notice-line">${icon('user')}<span>Mencari opini, tips & tutorial, atau artikel praktis karya guru?</span><a href="/berita?kategori=tulisan-guru">Buka Opini & Artikel Guru →</a></div>`}
+    <div class="filters" id="fUnit"${guruMode ? ' style="display:none"' : ''}></div>
     <div class="filters" id="fCat" style="margin-top:-16px"></div>
     <div class="news-grid" id="list"></div><div class="pager" id="pager"></div>
   </div></section>`;
   const sync = () => {
-    const p = new URLSearchParams(); if (unit) p.set('unit', unit); if (cat) p.set('kategori', cat); if (q) p.set('q', q); if (page > 1) p.set('page', page);
+    const p = new URLSearchParams(); if (unit && !guruMode) p.set('unit', unit); if (cat && cat !== 'kabar') p.set('kategori', cat); if (q) p.set('q', q); if (page > 1) p.set('page', page);
     history.replaceState(null, '', '/berita' + (p.toString() ? '?' + p : ''));
   };
   $('#fUnit').innerHTML = unitSelect(unit);
-  $('#fCat').innerHTML = [['', 'Semua kategori'], ['tulisan-guru', 'Tulisan Guru'], ...Object.entries(CATS)].map(([v, l]) => `<button class="chip-btn${v === cat ? ' on' : ''}" data-v="${v}">${esc(l)}</button>`).join('') +
-    `<label class="search">${icon('search')}<input id="q" type="search" placeholder="Cari berita…" value="${esc(q)}" aria-label="Cari berita"></label>`;
+  const chips = guruMode ? [['tulisan-guru', 'Semua tulisan guru'], ...GURU_CATS.map((k) => [k, CATS[k]])]
+    : [['kabar', 'Semua berita'], ...Object.entries(CATS).filter(([k]) => !GURU_CATS.includes(k))];
+  $('#fCat').innerHTML = chips.map(([v, l]) => `<button class="chip-btn${v === cat ? ' on' : ''}" data-v="${v}">${esc(l)}</button>`).join('') +
+    `<label class="search">${icon('search')}<input id="q" type="search" placeholder="${guruMode ? 'Cari tulisan guru…' : 'Cari berita…'}" value="${esc(q)}" aria-label="Cari"></label>`;
   const load = async () => {
     sync(); $('#list').innerHTML = '<div class="skel" style="height:300px"></div>'.repeat(3);
-    const d = await api(`posts?limit=9&page=${page}${unit ? '&unit=' + unit : ''}${cat ? '&category=' + cat : ''}${q ? '&q=' + encodeURIComponent(q) : ''}`);
-    $('#list').innerHTML = d.items.length ? d.items.map((p) => postCard(p)).join('') : `<div style="grid-column:1/-1">${empty('Tidak ada berita yang cocok.')}</div>`;
+    const d = await api(`posts?limit=9&page=${page}${unit && !guruMode ? '&unit=' + unit : ''}${cat ? '&category=' + cat : ''}${q ? '&q=' + encodeURIComponent(q) : ''}`);
+    $('#list').innerHTML = d.items.length ? d.items.map((p) => postCard(p)).join('') : `<div style="grid-column:1/-1">${empty(guruMode ? 'Belum ada tulisan guru yang cocok.' : 'Tidak ada berita yang cocok.')}</div>`;
     $('#pager').innerHTML = d.pages > 1 ? `<button ${page <= 1 ? 'disabled' : ''} data-p="${page - 1}">‹</button>${Array.from({ length: d.pages }, (_, i) => `<button class="${i + 1 === page ? 'on' : ''}" data-p="${i + 1}">${i + 1}</button>`).join('')}<button ${page >= d.pages ? 'disabled' : ''} data-p="${page + 1}">›</button>` : '';
   };
   $('#fUnit').onchange = (e) => { unit = e.target.value; page = 1; load(); };
@@ -841,7 +856,7 @@ PAGES.artikel = async (main) => {
   const meta = document.querySelector('meta[name="description"]'); if (meta) meta.content = p.excerpt || '';
   main.innerHTML = `
   <section class="page-hero"><div class="wrap">
-    <nav class="crumbs mono"><a href="/">Beranda</a><span><a href="/berita">Berita</a></span><span><a href="${unitUrl(u)}">${esc(u.short || u.name)}</a></span></nav>
+    <nav class="crumbs mono"><a href="/">Beranda</a>${isGuru ? `<span><a href="/berita?kategori=tulisan-guru">Opini & Artikel Guru</a></span><span><a href="/berita?kategori=${esc(p.category)}">${esc(CATS[p.category] || '')}</a></span>` : `<span><a href="/berita">Berita</a></span><span><a href="${unitUrl(u)}">${esc(u.short || u.name)}</a></span>`}</nav>
     <div class="meta" style="color:#c3cfe0;margin-bottom:16px">${unitBadge(p.unit_slug)}<span>${esc(CATS[p.category] || '')}</span></div>
     <h1 style="font-size:clamp(1.9rem,4.4vw,3.4rem);max-width:980px">${esc(p.title)}</h1>
     <div class="meta" style="color:#c3cfe0;margin-top:18px"><span>${icon('calendar')}${fmtDate(p.published_at, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>

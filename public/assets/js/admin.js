@@ -227,7 +227,7 @@ function bindImageTools(ed, area) {
 let docImportP = null;
 const loadDocImport = () => (docImportP ||= new Promise((ok, no) => {
   if (window.DocImport) return ok(window.DocImport);
-  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=30';
+  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=31';
   sc.onload = () => ok(window.DocImport); sc.onerror = () => { docImportP = null; no(new Error('Gagal memuat fitur impor. Periksa koneksi lalu coba lagi.')); };
   document.head.appendChild(sc);
 }));
@@ -247,9 +247,17 @@ function bindDocImport(ed, area, root) {
     try {
       const DI = await loadDocImport();
       const r = await DI.convert(file, { progress: say, upload: async (blob) => { try { return await uploadImage(blob, 1600); } catch { return ''; } } });
-      if (hasText) area.insertAdjacentHTML('beforeend', r.html); else area.innerHTML = r.html;
-      // judul & sampul otomatis bila masih kosong
-      const t = $('[name=title]', root); if (t && !t.value.trim() && r.title) t.value = r.title;
+      // judul otomatis bila masih kosong; judul dokumen tidak diulang di awal isi
+      const t = $('[name=title]', root);
+      let html = r.html;
+      if (t && !t.value.trim() && r.title) {
+        t.value = r.title;
+        const tmp = document.createElement('div'); tmp.innerHTML = html;
+        const h = tmp.firstElementChild;
+        if (h && /^H[1-4]$/.test(h.tagName) && h.textContent.trim() === r.title) { h.remove(); html = tmp.innerHTML; }
+      }
+      if (hasText) area.insertAdjacentHTML('beforeend', html); else area.innerHTML = html;
+      // sampul otomatis bila masih kosong
       const cov = $('[name=cover]', root);
       if (cov && !cov.value && r.images[0]) {
         cov.value = r.images[0];
@@ -515,7 +523,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 30</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 31</span>
       </div>
     </aside>
     <div class="main">

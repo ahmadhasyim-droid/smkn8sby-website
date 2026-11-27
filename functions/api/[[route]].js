@@ -868,6 +868,7 @@ export async function onRequest(ctx) {
       const where = [`status='publish'`]; const args = [];
       if (q.get('unit')) { where.push('unit_slug=?'); args.push(q.get('unit')); }
       if (q.get('category') === 'tulisan-guru') where.push(`category IN ('opini','tips','artikel')`);
+      else if (q.get('category') === 'kabar') where.push(`category NOT IN ('opini','tips','artikel')`); // berita & kegiatan tanpa tulisan guru
       else if (q.get('category')) { where.push('category=?'); args.push(q.get('category')); }
       if (q.get('featured')) where.push('featured=1');
       if (q.get('q')) { where.push('(title LIKE ? OR excerpt LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
