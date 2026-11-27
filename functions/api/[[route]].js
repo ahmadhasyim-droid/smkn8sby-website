@@ -150,7 +150,7 @@ function cleanHtml(html) {
     .replace(/<\s*\/?\s*(script|style|iframe|object|embed|form|input|button|textarea|select|meta|link|base)[^>]*>/gi, '')
     .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     .replace(/(href|src)\s*=\s*("|')\s*(javascript|vbscript|data:text)[^"']*\2/gi, '$1="#"')
-    .slice(0, 200_000);
+    .slice(0, 500_000);
 }
 const textOnly = (html) => String(html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -1101,7 +1101,7 @@ export async function onRequest(ctx) {
         extra.backup_last = (await db.prepare(`SELECT created_at FROM backup_log WHERE kind='unduh' ORDER BY id DESC LIMIT 1`).first('created_at')) || null;
         extra.backup_interval = clampInt(await db.prepare(`SELECT value FROM settings WHERE key='backup_interval'`).first('value'), 7, 1, 90);
       }
-      if (canReview(user)) extra.pending = (await db.prepare(`SELECT COUNT(*) n FROM posts WHERE status='review' AND author_id IN (SELECT id FROM users WHERE role='guru')`).first()).n;
+      if (canReview(user)) extra.pending = (await db.prepare(`SELECT COUNT(*) n FROM posts WHERE (status='review' OR rev_state='review') AND author_id IN (SELECT id FROM users WHERE role='guru')`).first()).n;
       if (canMessages(user)) extra.unread = (await db.prepare(`SELECT COUNT(*) n FROM messages WHERE is_read=0`).first()).n;
       if (isAdmin || isBkk(user)) extra.lowongan = (await db.prepare(`SELECT COUNT(*) n FROM lowongan WHERE status='buka'`).first()).n;
       if (isAdmin || user.unit_slug === 'lsp') extra.skema = (await db.prepare(`SELECT COUNT(*) n FROM skema`).first()).n;
@@ -1297,10 +1297,17 @@ export async function onRequest(ctx) {
       const id = parts[2] ? clampInt(parts[2], 0, 0, 1e12) : null;
       const guruOnly = `author_id IN (SELECT id FROM users WHERE role='guru')`;
       if (method === 'GET' && !id) {
-        const st = ['review', 'draft', 'publish'].includes(q.get('status')) ? q.get('status') : q.get('status') === 'ditolak' ? 'ditolak' : 'review';
-        const rows = await db.prepare(`SELECT id,slug,title,excerpt,cover,category,status,author_name,author_title,submitted_at,review_note,reviewed_by,reviewed_at,published_at,views FROM posts
-          WHERE ${guruOnly} AND status=? ORDER BY ${st === 'publish' ? 'published_at' : 'COALESCE(submitted_at,updated_at)'} ${st === 'review' ? 'ASC' : 'DESC'} LIMIT 200`).bind(st).all();
+        const st = ['review', 'draft', 'publish', 'ditolak', 'revisi'].includes(q.get('status')) ? q.get('status') : 'review';
+        const cols = `id,slug,title,excerpt,cover,category,status,author_name,author_title,submitted_at,review_note,reviewed_by,reviewed_at,published_at,views,rev_state,rev_at,rev_data`;
+        const rows = st === 'revisi'
+          ? await db.prepare(`SELECT ${cols} FROM posts WHERE ${guruOnly} AND status='publish' AND rev_state='review' ORDER BY rev_at ASC LIMIT 200`).all()
+          : await db.prepare(`SELECT ${cols} FROM posts WHERE ${guruOnly} AND status=? ORDER BY ${st === 'publish' ? 'published_at' : 'COALESCE(submitted_at,updated_at)'} ${st === 'review' ? 'ASC' : 'DESC'} LIMIT 200`).bind(st).all();
+        for (const r of rows.results) { // judul/ringkasan revisi untuk tab Revisi
+          if (st === 'revisi' && r.rev_data) { try { const v = JSON.parse(r.rev_data); r.rev_title = v.title; r.excerpt = v.excerpt || r.excerpt; } catch { /* abaikan */ } }
+          delete r.rev_data;
+        }
         const counts = Object.fromEntries((await db.prepare(`SELECT status, COUNT(*) n FROM posts WHERE ${guruOnly} GROUP BY status`).all()).results.map((r) => [r.status, r.n]));
+        counts.revisi = (await db.prepare(`SELECT COUNT(*) n FROM posts WHERE ${guruOnly} AND status='publish' AND rev_state='review'`).first()).n;
         return json({ items: rows.results, counts });
       }
       const post = id ? await db.prepare(`SELECT * FROM posts WHERE id=? AND ${guruOnly}`).bind(id).first() : null;
@@ -1316,6 +1323,19 @@ export async function onRequest(ctx) {
         if (b.cover !== undefined) edits.cover = str(b.cover, 300);
         if (b.video_url !== undefined) edits.video_url = await normalizeVideo(b.video_url);
         const who = user.name || user.username;
+        if (b.revision) { // keputusan atas revisi tulisan yang sudah tayang
+          if (!post.rev_data) return err('Tidak ada revisi untuk tulisan ini.');
+          if (b.action === 'approve') Object.assign(edits, { rev_data: null, rev_state: null, rev_note: null, rev_at: null, reviewed_by: who, reviewed_at: now(), review_note: note || null });
+          else if (b.action === 'reject') {
+            if (!note) return err('Tuliskan catatan untuk penulis.');
+            for (const k of ['title', 'content', 'excerpt', 'category', 'cover', 'video_url']) delete edits[k]; // versi tayang tidak diubah
+            Object.assign(edits, { rev_state: 'ditolak', rev_note: note, reviewed_by: who, reviewed_at: now() });
+          } else return err('Aksi tidak dikenal.');
+          edits.updated_at = now();
+          const k = Object.keys(edits);
+          await db.prepare(`UPDATE posts SET ${k.map((x) => x + '=?').join(',')} WHERE id=?`).bind(...k.map((x) => edits[x]), id).run();
+          return json({ ok: true, slug: post.slug });
+        }
         if (b.action === 'approve') Object.assign(edits, { status: 'publish', published_at: post.published_at || now(), reviewed_by: who, reviewed_at: now(), review_note: note || null });
         else if (b.action === 'reject') { if (!note) return err('Tuliskan catatan revisi untuk penulis.'); Object.assign(edits, { status: 'ditolak', reviewed_by: who, reviewed_at: now(), review_note: note }); }
         else if (b.action !== 'save') return err('Aksi tidak dikenal.');
@@ -1358,7 +1378,7 @@ export async function onRequest(ctx) {
         if (q.get('q') && area === 'prestasi') { where.push('(title LIKE ? OR students LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
         if (q.get('q') && area === 'dudi') { where.push('(name LIKE ? OR address LIKE ?)'); args.push(`%${q.get('q')}%`, `%${q.get('q')}%`); }
         const limit = clampInt(q.get('limit'), 20, 1, 100), page = clampInt(q.get('page'), 1, 1, 9999);
-        const cols = area === 'posts' ? 'id,slug,title,cover,video_url,category,unit_slug,status,featured,views,author_name,published_at,submitted_at,review_note,reviewed_by,reviewed_at' : '*';
+        const cols = area === 'posts' ? 'id,slug,title,cover,video_url,category,unit_slug,status,featured,views,author_name,published_at,submitted_at,review_note,reviewed_by,reviewed_at,rev_state,rev_note,rev_at' : '*';
         const [rows, total] = await Promise.all([
           db.prepare(`SELECT ${cols} FROM ${res.table} WHERE ${where.join(' AND ')} ORDER BY ${res.order} LIMIT ? OFFSET ?`).bind(...args, limit, (page - 1) * limit).all(),
           db.prepare(`SELECT COUNT(*) n FROM ${res.table} WHERE ${where.join(' AND ')}`).bind(...args).first(),
@@ -1404,7 +1424,22 @@ export async function onRequest(ctx) {
           if (data.content !== undefined && !data.excerpt) data.excerpt = textOnly(data.content).slice(0, 220);
           if (isGuru(user)) {
             // Guru: kategori terbatas, tidak bisa terbit sendiri — dikirim ke WMM untuk disetujui
-            if (existing && existing.status === 'publish') return err('Tulisan sudah tayang dan tidak dapat diubah lagi. Hubungi WMM bila perlu revisi.', 403);
+            if (existing && existing.status === 'publish') {
+              // Tulisan sudah tayang: perubahan disimpan sebagai REVISI. Versi yang tayang tidak berubah sampai WMM menyetujui.
+              if (b.cancel_revision) {
+                await db.prepare(`UPDATE posts SET rev_data=NULL, rev_state=NULL, rev_note=NULL, rev_at=NULL WHERE id=?`).bind(id).run();
+                return json({ ok: true, id, slug: existing.slug, revision: 'cancelled' });
+              }
+              const cur = (() => { try { return JSON.parse(existing.rev_data || '{}'); } catch { return {}; } })();
+              const rev = { ...cur };
+              for (const k of ['title', 'content', 'excerpt', 'cover', 'video_url']) if (k in data) rev[k] = data[k];
+              if (GURU_CATS.includes(data.category)) rev.category = data.category;
+              if ('content' in data) rev.excerpt = textOnly(data.content).slice(0, 220);
+              if ('title' in rev && !rev.title) return err('Judul tidak boleh kosong.');
+              const state = b.status === 'draft' ? 'draft' : 'review';
+              await db.prepare(`UPDATE posts SET rev_data=?, rev_state=?, rev_note=?, rev_at=? WHERE id=?`).bind(JSON.stringify(rev), state, state === 'review' ? null : existing.rev_note, now(), id).run();
+              return json({ ok: true, id, slug: existing.slug, revision: state });
+            }
             data.status = b.status === 'draft' ? 'draft' : 'review';
             if (!GURU_CATS.includes(data.category)) data.category = existing && GURU_CATS.includes(existing.category) ? existing.category : 'opini';
             data.unit_slug = 'sekolah';

@@ -11,6 +11,7 @@ const ICONS = {
   perhotelan: '<path d="M3 18h18"/><path d="M5 18a7 7 0 0 1 14 0"/><path d="M12 11v0"/><path d="M12 8V6"/><path d="M10 6h4"/><path d="M4 21h16"/>',
   kuliner: '<path d="M6 13.9A4 4 0 0 1 7.6 6.3a5 5 0 0 1 8.8 0A4 4 0 0 1 18 13.9V17H6z"/><path d="M6 17h12v3a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1z"/><path d="M10 13v4M14 13v4"/>',
   multimedia: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M10 8.5v5l4.5-2.5z"/><path d="M8 21h8M12 17v4"/>',
+  inklusi: '<circle cx="12" cy="4.5" r="2"/><path d="M4 8.5l8 1.5 8-1.5M12 10v4.5M12 14.5l-3.5 6.5M12 14.5l3.5 6.5"/>',
   busana: '<path d="M10 6a2 2 0 1 1 3 1.7c-.6.4-1 .9-1 1.6V11"/><path d="M12 11l-8.6 6.4c-.8.6-.4 1.6.5 1.6h16.2c.9 0 1.3-1 .5-1.6z"/>',
   lsp: '<circle cx="12" cy="9" r="5.5"/><path d="M9.5 9l1.8 1.8L15 7.2"/><path d="M8.5 13.8L7 21l5-2.8 5 2.8-1.5-7.2"/>',
   dkv: '<path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.6 7.6"/><circle cx="11" cy="11" r="2"/>',
@@ -97,6 +98,11 @@ function sanitize(html) {
     [...node.children].forEach((el) => {
       if (!ALLOWED.has(el.tagName)) { el.replaceWith(...el.childNodes); return walk(node); }
       [...el.attributes].forEach((a) => {
+        if (a.name === 'class' && (el.tagName === 'IMG' || el.tagName === 'FIGURE')) { // ukuran & posisi gambar dari editor
+          const ok = a.value.split(/\s+/).filter((c) => /^img-(s|m|l|f|left|center|right)$/.test(c)).join(' ');
+          if (ok) el.setAttribute('class', ok); else el.removeAttribute('class');
+          return;
+        }
         const keep = (el.tagName === 'A' && a.name === 'href') || (el.tagName === 'IMG' && (a.name === 'src' || a.name === 'alt'));
         if (!keep) el.removeAttribute(a.name);
         else if (a.name !== 'alt') el.setAttribute(a.name, safeUrl(a.value));
@@ -387,7 +393,7 @@ PAGES.home = async (main) => {
   const units = Object.values(UNITS);
   const jur = units.filter((u) => u.type === 'jurusan'), lem = units.filter((u) => u.type === 'lembaga'), tefa = units.filter((u) => u.type === 'tefa');
   const title = esc(s.hero_title || '').replace(/,\s*(.+)$/, ',<br><em>$1</em>');
-  const pos = ['left:0;top:10%', 'right:0;top:2%', 'right:-2%;top:50%', 'right:8%;top:88%', 'left:0;top:74%'];
+  const pos = ['left:0;top:10%', 'right:0;top:2%', 'right:-2%;top:50%', 'right:8%;top:88%', 'left:0;top:74%', 'left:-6%;top:42%'];
   const ticker = [s.running_text, ...jur.map((u) => u.name), ...lem.map((u) => u.short), ...tefa.map((u) => u.name)].filter(Boolean);
   const stats = [
     [jur.length, 'Program keahlian'], [tefa.length || '', 'Teaching Factory'], ['P1', 'Lembaga Sertifikasi Profesi'], ['BKK', 'Layanan bursa kerja khusus'],
@@ -409,7 +415,7 @@ PAGES.home = async (main) => {
       <div class="hero-visual" aria-hidden="true">
         <div class="orbit o2"></div><div class="orbit"></div><div class="orbit o3"></div>
         <div class="emblem"><img src="/assets/img/emblem-smkn8.png" alt=""></div>
-        ${jur.map((u, i) => `<a class="orbit-chip" tabindex="-1" href="${unitUrl(u)}" style="--c:${u.color};${pos[i % 5]}"><i>${icon(u.icon || u.slug)}</i>${esc((n => n.length > 16 ? u.short : n)(u.name.split('/')[0].trim()))}</a>`).join('')}
+        ${jur.map((u, i) => `<a class="orbit-chip" tabindex="-1" href="${unitUrl(u)}" style="--c:${u.color};${pos[i % pos.length]}"><i>${icon(u.icon || u.slug)}</i>${esc((n => n.length > 16 ? u.short : n)(u.name.split('/')[0].trim()))}</a>`).join('')}
       </div>
     </div>
     <div class="skyline">${skyline()}</div>
@@ -417,8 +423,8 @@ PAGES.home = async (main) => {
   <div class="ticker" aria-hidden="true"><div class="ticker-track">${[0, 1].map(() => `<span>${ticker.map((t) => `<span>${esc(t)}</span>`).join('')}</span>`).join('')}</div></div>
 
   <section class="section" id="program"><div class="wrap">
-    ${secHead('01', 'Program Keahlian', 'Lima keahlian,<br>satu kota kreatif', 'Setiap program keahlian punya laboratorium, kegiatan, dan halaman sendiri. Pilih untuk melihat profil, kompetensi, kegiatan, dan galerinya.')}
-    <div class="prog-grid">${jur.map((u, i) => `
+    ${secHead('01', 'Program Keahlian', `${['Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan'][jur.length - 1] || jur.length} keahlian,<br>satu kota kreatif`, 'Setiap program keahlian punya laboratorium, kegiatan, dan halaman sendiri. Pilih untuk melihat profil, kompetensi, kegiatan, dan galerinya.')}
+    <div class="prog-grid n${jur.length}">${jur.map((u, i) => `
       <a class="prog" href="${unitUrl(u)}" style="--c:${u.color}">
         <span class="num">${String(i + 1).padStart(2, '0')} / ${String(jur.length).padStart(2, '0')}</span>
         <span class="go">${icon('arrow')}</span>

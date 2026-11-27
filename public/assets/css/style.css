@@ -916,3 +916,21 @@ select.chip-btn { appearance: auto; padding-right: 10px; }
 .gp-warn a { font-weight: 700; text-decoration: underline; }
 .gp-warn.sm { padding: 14px; margin-bottom: 14px; }
 .gp-warn.sm > div { font-size: .82rem; }
+/* 6 program (dengan Inklusi): 3 kartu per baris */
+.prog-grid.n6 .prog, .prog-grid.n6 .prog:nth-child(1), .prog-grid.n6 .prog:nth-child(2) { grid-column: span 2; }
+@media (max-width: 1180px) { .prog-grid.n6 .prog, .prog-grid.n6 .prog:nth-child(1), .prog-grid.n6 .prog:nth-child(2), .prog-grid.n6 .prog:nth-child(5) { grid-column: span 1; } }
+/* ukuran & posisi gambar di isi berita (diatur dari editor) */
+.article-body img { max-width: 100%; display: block; }
+.article-body .img-s { width: 33%; } .article-body .img-m { width: 50%; } .article-body .img-l { width: 75%; } .article-body .img-f { width: 100%; }
+.article-body figure { margin: 1.2em auto; } .article-body figure img { width: 100%; margin: 0 0 6px; }
+.article-body figcaption { font-size: .86rem; color: var(--muted); text-align: center; line-height: 1.45; }
+.article-body .img-center { margin-left: auto; margin-right: auto; }
+.article-body .img-left { float: left; margin: .3em 1.4em 1em 0; }
+.article-body .img-right { float: right; margin: .3em 0 1em 1.4em; }
+.article-body .img-left.img-f, .article-body .img-right.img-f, .article-body .img-left.img-l, .article-body .img-right.img-l { float: none; margin-left: auto; margin-right: auto; }
+.article-body::after { content: ''; display: block; clear: both; }
+.article-body table { width: 100%; border-collapse: collapse; margin: 1.2em 0; font-size: .95rem; display: block; overflow-x: auto; }
+.article-body td, .article-body th { border: 1px solid var(--line); padding: 8px 10px; vertical-align: top; }
+@media (max-width: 640px) { .article-body .img-s, .article-body .img-m { width: 100%; float: none; margin: 1em auto; } .article-body .img-l { width: 100%; } }
+.article-body ul, .article-body ol { overflow: hidden; }
+.article-body figure img { width: 100% !important; float: none !important; margin: 0 0 6px !important; }

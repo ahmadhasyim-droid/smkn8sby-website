@@ -287,3 +287,32 @@ td.act .btn + .btn { margin-left: 4px; }
 .sb-note { font-size: .78rem; color: var(--muted); line-height: 1.5; }
 .link-btn { background: none; border: 0; padding: 0; font: inherit; font-size: .82rem; font-weight: 700; color: var(--blue); cursor: pointer; text-decoration: underline; }
 .link-btn.bad { color: var(--bad); }
+/* editor: impor dokumen & alat gambar */
+.editor { position: relative; }
+.editor-bar .imp-btn { display: inline-flex; gap: 6px; align-items: center; color: #b4441c; font-size: .84rem; }
+.editor-bar .imp-btn .ico { width: 16px; height: 16px; }
+.editor-area img { cursor: pointer; display: block; }
+.editor-area .img-s { width: 33%; } .editor-area .img-m { width: 50%; } .editor-area .img-l { width: 75%; } .editor-area .img-f { width: 100%; }
+.editor-area .img-center { margin-left: auto; margin-right: auto; }
+.editor-area .img-left { float: left; margin: 4px 16px 10px 0; } .editor-area .img-right { float: right; margin: 4px 0 10px 16px; }
+.editor-area figure { margin: 10px auto; } .editor-area figure img { width: 100%; margin: 0 0 4px; float: none; }
+.editor-area figcaption { font-size: .85rem; color: var(--muted); text-align: center; }
+.editor-area::after { content: ''; display: block; clear: both; }
+.editor-area img.sel { outline: 3px solid var(--blue); outline-offset: 2px; }
+.editor-area table { border-collapse: collapse; width: 100%; } .editor-area td, .editor-area th { border: 1px solid var(--line); padding: 6px 8px; }
+.img-tools { position: absolute; z-index: 8; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; background: var(--ink, #0d1a2e); color: #fff; border-radius: 8px; padding: 5px 6px; box-shadow: 0 8px 24px rgba(13, 26, 46, .25); font-size: .8rem; max-width: calc(100% - 16px); }
+.img-tools > span:not(.sep) { color: #9fb0c8; padding: 0 4px 0 6px; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+.img-tools button { border: 0; background: none; color: #fff; padding: 6px 9px; border-radius: 5px; cursor: pointer; font: inherit; font-weight: 600; display: inline-flex; gap: 4px; align-items: center; }
+.img-tools button:hover { background: rgba(255, 255, 255, .12); }
+.img-tools button.on { background: #2563eb; }
+.img-tools button.bad { color: #ffb4b4; }
+.img-tools .ico { width: 14px; height: 14px; }
+.img-tools .sep { width: 1px; align-self: stretch; background: rgba(255, 255, 255, .2); margin: 2px 4px; }
+.imp-overlay { position: absolute; inset: 0; z-index: 9; background: rgba(255, 255, 255, .88); display: grid; place-items: center; border-radius: 6px; }
+.imp-overlay > div { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 20px; }
+.imp-overlay small { color: var(--muted); }
+.imp-overlay .spin { width: 34px; height: 34px; border-radius: 50%; border: 4px solid #e2e8f0; border-top-color: #f26836; animation: impspin .8s linear infinite; }
+@keyframes impspin { to { transform: rotate(360deg); } }
+.editor-area ul, .editor-area ol { overflow: hidden; }
+.editor-area figure img { width: 100% !important; }
+.img-tools[hidden] { display: none; }

@@ -46,7 +46,8 @@ function toast(msg, type = '') {
   $('#toast').appendChild(d); setTimeout(() => d.remove(), 3600);
 }
 async function api(path, opt = {}) {
-  const r = await fetch('/api/' + path, { method: opt.method || 'GET', headers: opt.body ? { 'Content-Type': 'application/json' } : {}, body: opt.body ? JSON.stringify(opt.body) : undefined, credentials: 'same-origin' });
+  const m = opt.method || 'GET', send = opt.body || m !== 'GET'; // HAPUS juga harus JSON (aturan keamanan server)
+  const r = await fetch('/api/' + path, { method: m, headers: send ? { 'Content-Type': 'application/json' } : {}, body: send ? JSON.stringify(opt.body || {}) : undefined, credentials: 'same-origin' });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || 'Terjadi kesalahan');
   return d;

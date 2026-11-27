@@ -45,7 +45,8 @@ const ic = (n) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="curr
 
 async function api(path, opts = {}) {
   const o = { method: opts.method || 'GET', headers: {} };
-  if (opts.body !== undefined) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opts.body); }
+  // semua permintaan yang mengubah data dikirim sebagai JSON (server menolak tipe lain demi keamanan) — termasuk HAPUS
+  if (opts.body !== undefined || o.method !== 'GET') { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opts.body ?? {}); }
   const r = await fetch('/api/' + path, o);
   const d = await r.json().catch(() => ({}));
   if (r.status === 401 && !path.startsWith('auth/')) { location.hash = ''; boot(); throw new Error('Sesi berakhir, silakan login lagi.'); }
@@ -118,8 +119,12 @@ function fieldHtml(f, val) {
         <span class="sep"></span><button type="button" data-block="h2" title="Judul">H2</button><button type="button" data-block="h3" title="Subjudul">H3</button><button type="button" data-block="p" title="Paragraf">¶</button><button type="button" data-block="blockquote" title="Kutipan">❝</button>
         <span class="sep"></span><button type="button" data-cmd="insertUnorderedList" title="Daftar">• List</button><button type="button" data-cmd="insertOrderedList" title="Daftar bernomor">1. List</button>
         <span class="sep"></span><button type="button" data-link title="Tautan">Link</button><button type="button" data-img-insert title="Sisipkan gambar">${ic('img')}</button><button type="button" data-cmd="removeFormat" title="Hapus format">Tx</button>
-        <input type="file" accept="image/*" hidden>
+        <span class="sep"></span><button type="button" class="imp-btn" data-import title="Impor isi dari file Word, PDF, atau PowerPoint">${ic('upload')}Impor Word / PDF / PPT</button>
+        <input type="file" accept="image/*" hidden data-imgfile><input type="file" accept=".docx,.pdf,.pptx,.doc,.ppt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden data-docfile>
       </div>
+      <div class="img-tools" hidden><span>Ukuran</span><button type="button" data-sz="img-s">Kecil</button><button type="button" data-sz="img-m">Sedang</button><button type="button" data-sz="img-l">Besar</button><button type="button" data-sz="img-f">Penuh</button>
+        <span class="sep"></span><span>Posisi</span><button type="button" data-al="img-left" title="Kiri, teks mengalir di samping">Kiri</button><button type="button" data-al="img-center">Tengah</button><button type="button" data-al="img-right" title="Kanan, teks mengalir di samping">Kanan</button>
+        <span class="sep"></span><button type="button" data-imgcap>Keterangan</button><button type="button" data-imgdel class="bad">${ic('trash')}Hapus</button></div>
       <div class="editor-area" contenteditable="true" data-placeholder="Tulis isi berita di sini…">${v}</div></div></div>`;
     default: return wrap(`<input type="${f.type || 'text'}" ${name} value="${esc(v)}" ${f.list ? `list="${f.list}" autocomplete="off"` : ''} ${f.required ? 'required' : ''} ${f.max ? `maxlength="${f.max}"` : ''} ${f.placeholder ? `placeholder="${esc(f.placeholder)}"` : ''}>`);
   }
@@ -141,7 +146,7 @@ function bindForm(root, fields) {
   });
   // editor teks
   $$('[data-rich]', root).forEach((ed) => {
-    const area = $('.editor-area', ed), fileIn = $('input[type=file]', ed);
+    const area = $('.editor-area', ed), fileIn = $('[data-imgfile]', ed);
     const focus = () => area.focus();
     $$('[data-cmd]', ed).forEach((b) => (b.onclick = () => { focus(); document.execCommand(b.dataset.cmd); }));
     $$('[data-block]', ed).forEach((b) => (b.onclick = () => { focus(); document.execCommand('formatBlock', false, b.dataset.block); }));
@@ -154,17 +159,114 @@ function bindForm(root, fields) {
       try {
         const url = await uploadImage(fileIn.files[0], 1600);
         focus(); if (range) { const s = getSelection(); s.removeAllRanges(); s.addRange(range); }
-        document.execCommand('insertImage', false, url); toast('Gambar ditambahkan');
+        document.execCommand('insertImage', false, url);
+        $$(`img[src="${url}"]`, area).forEach((im) => { if (!im.className) im.className = 'img-l img-center'; });
+        toast('Gambar ditambahkan. Klik gambar untuk mengatur ukuran & posisinya.');
       } catch (e) { toast(e.message, true); }
       fileIn.value = '';
     };
     area.addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
+    bindImageTools(ed, area);
+    bindDocImport(ed, area, root);
   });
+}
+// ---------- atur ukuran & posisi gambar di editor ----------
+const IMG_SIZES = ['img-s', 'img-m', 'img-l', 'img-f'], IMG_ALIGN = ['img-left', 'img-center', 'img-right'];
+function bindImageTools(ed, area) {
+  const bar = $('.img-tools', ed);
+  let cur = null;
+  const tgt = () => (cur && cur.closest('figure') && area.contains(cur.closest('figure')) ? cur.closest('figure') : cur); // gambar berketerangan diatur lewat figure
+  const mark = () => {
+    const t = tgt();
+    $$('[data-sz]', bar).forEach((b) => b.classList.toggle('on', !!t && t.classList.contains(b.dataset.sz)));
+    $$('[data-al]', bar).forEach((b) => b.classList.toggle('on', !!t && t.classList.contains(b.dataset.al)));
+  };
+  const place = () => {
+    if (!cur) return;
+    const er = ed.getBoundingClientRect(), r = cur.getBoundingClientRect();
+    bar.style.top = Math.max(48, r.top - er.top - bar.offsetHeight - 8) + 'px';
+    bar.style.left = Math.max(8, Math.min(r.left - er.left, ed.clientWidth - bar.offsetWidth - 8)) + 'px';
+  };
+  const pick = (img) => {
+    $$('img.sel', area).forEach((x) => x.classList.remove('sel'));
+    cur = img; bar.hidden = !img;
+    if (img) { img.classList.add('sel'); mark(); place(); }
+  };
+  area.addEventListener('click', (e) => pick(e.target.tagName === 'IMG' ? e.target : null));
+  document.addEventListener('click', (e) => { if (cur && !ed.contains(e.target)) pick(null); });
+  area.addEventListener('keydown', () => pick(null));
+  window.addEventListener('scroll', place, { passive: true });
+  const setCls = (list, c) => { const t = tgt(); if (!t) return; t.classList.remove(...list); t.classList.add(c); if (!IMG_SIZES.some((x) => t.classList.contains(x))) t.classList.add('img-l'); if (!IMG_ALIGN.some((x) => t.classList.contains(x))) t.classList.add('img-center'); mark(); setTimeout(place, 50); area.dispatchEvent(new Event('input', { bubbles: true })); };
+  $$('[data-sz]', bar).forEach((b) => (b.onclick = () => setCls(IMG_SIZES, b.dataset.sz)));
+  $$('[data-al]', bar).forEach((b) => (b.onclick = () => setCls(IMG_ALIGN, b.dataset.al)));
+  $('[data-imgdel]', bar).onclick = () => { if (!cur) return; const fig = cur.closest('figure'); (fig && area.contains(fig) ? fig : cur).remove(); pick(null); };
+  $('[data-imgcap]', bar).onclick = () => {
+    if (!cur) return;
+    let fig = cur.closest('figure');
+    const old = fig?.querySelector('figcaption')?.textContent || '';
+    const t = prompt('Keterangan gambar (kosongkan untuk menghapus keterangan):', old);
+    if (t === null) return;
+    const moveCls = (from, to) => { const cl = [...from.classList].filter((c) => /^img-/.test(c)); from.classList.remove(...cl); to.classList.add(...cl); };
+    if (!fig && t.trim()) {
+      fig = document.createElement('figure');
+      const par = cur.parentElement; // bila gambar sendirian di dalam paragraf, paragrafnya diganti figure
+      if (par && par !== area && par.tagName === 'P' && !par.textContent.trim() && par.querySelectorAll('img').length === 1) par.replaceWith(fig); else cur.replaceWith(fig);
+      fig.appendChild(cur); moveCls(cur, fig);
+    }
+    if (fig) {
+      let cap = fig.querySelector('figcaption');
+      if (t.trim()) { if (!cap) { cap = document.createElement('figcaption'); fig.appendChild(cap); } cap.textContent = t.trim(); }
+      else { if (cap) cap.remove(); moveCls(fig, cur); fig.replaceWith(cur); }
+    }
+    pick(cur);
+  };
+}
+// ---------- impor Word / PDF / PowerPoint ----------
+let docImportP = null;
+const loadDocImport = () => (docImportP ||= new Promise((ok, no) => {
+  if (window.DocImport) return ok(window.DocImport);
+  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=28';
+  sc.onload = () => ok(window.DocImport); sc.onerror = () => { docImportP = null; no(new Error('Gagal memuat fitur impor. Periksa koneksi lalu coba lagi.')); };
+  document.head.appendChild(sc);
+}));
+function bindDocImport(ed, area, root) {
+  const btn = $('[data-import]', ed), fin = $('[data-docfile]', ed);
+  btn.onclick = () => fin.click();
+  fin.onchange = async () => {
+    const file = fin.files[0]; fin.value = '';
+    if (!file) return;
+    if (file.size > 40e6) return toast('File terlalu besar (maks. 40 MB). Perkecil gambar di dokumen atau bagi menjadi beberapa file.', true);
+    const hasText = area.textContent.trim() || area.querySelector('img');
+    if (hasText && !confirm('Editor sudah berisi tulisan.\n\nOK = tambahkan isi dokumen di BAGIAN AKHIR\nBatal = batalkan impor')) return;
+    const ov = document.createElement('div'); ov.className = 'imp-overlay';
+    ov.innerHTML = `<div><span class="spin"></span><b>Mengimpor ${esc(file.name)}</b><small id="impMsg">Menyiapkan…</small></div>`;
+    ed.appendChild(ov);
+    const say = (m) => { const el = $('#impMsg', ov); if (el) el.textContent = m; };
+    try {
+      const DI = await loadDocImport();
+      const r = await DI.convert(file, { progress: say, upload: async (blob) => { try { return await uploadImage(blob, 1600); } catch { return ''; } } });
+      if (hasText) area.insertAdjacentHTML('beforeend', r.html); else area.innerHTML = r.html;
+      // judul & sampul otomatis bila masih kosong
+      const t = $('[name=title]', root); if (t && !t.value.trim() && r.title) t.value = r.title;
+      const cov = $('[name=cover]', root);
+      if (cov && !cov.value && r.images[0]) {
+        cov.value = r.images[0];
+        const box = cov.closest('[data-img]'), pv = box && $('.preview', box);
+        if (pv) { pv.style.backgroundImage = `url('${r.images[0]}')`; pv.textContent = ''; }
+        const clr = box && $('[data-clear]', box); if (clr) clr.hidden = false;
+      }
+      ed.previousElementSibling?.classList?.contains('imp-note') && ed.previousElementSibling.remove();
+      ed.insertAdjacentHTML('beforebegin', `<div class="notice ${r.warnings.length ? 'bad' : 'info'} imp-note"><b>Dokumen berhasil diimpor</b> (${r.images.length} gambar). Periksa kembali isinya: rapikan judul/paragraf bila perlu, dan <b>klik gambar</b> untuk mengatur ukuran, posisi, atau keterangannya.${r.warnings.length ? '<br>' + r.warnings.map(esc).join('<br>') : ''}</div>`);
+      toast('Dokumen berhasil diimpor');
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (e) { toast(e.message || 'Gagal mengimpor dokumen', true); }
+    ov.remove();
+  };
 }
 function readForm(root, fields) {
   const out = {};
   for (const f of fields) {
-    if (f.type === 'rich') out[f.k] = $(`[data-rich="${f.k}"] .editor-area`, root).innerHTML.trim();
+    if (f.type === 'rich') { const c = $(`[data-rich="${f.k}"] .editor-area`, root).cloneNode(true); c.querySelectorAll('.sel').forEach((x) => x.classList.remove('sel')); out[f.k] = c.innerHTML.replace(/ class=""/g, '').trim(); }
     else if (f.type === 'check') out[f.k] = $(`[name="${f.k}"]`, root)?.checked ? 1 : 0;
     else if (f.type === 'checks') out[f.k] = $$(`[data-checks="${f.k}"]:checked`, root).map((x) => x.value).join(',');
     else { const el = $(`[name="${f.k}"]`, root); if (el) out[f.k] = el.value.trim(); }
@@ -209,7 +311,7 @@ const RES = {
       ['Judul', (r) => `<span class="t-title">${esc(r.title)}</span><span class="t-sub">${fmtDate(r.published_at)} · ${esc(r.author_name || '')} · ${r.views || 0}× dibaca</span>`],
       ['Unit', (r) => unitTag(r.unit_slug), 'nonGuru'],
       ['Kategori', (r) => esc(CAT_LABEL[r.category] || r.category)],
-      ['Status', (r) => `${statusTag(r.status)}${r.featured ? ' <span class="tag" style="--c:#f26836">Utama</span>' : ''}${r.status === 'ditolak' && r.review_note ? `<span class="t-sub" style="max-width:260px;white-space:normal">Catatan WMM: ${esc(r.review_note)}</span>` : ''}${r.status === 'publish' && r.reviewed_by ? `<span class="t-sub">Disetujui ${esc(r.reviewed_by)}</span>` : ''}`],
+      ['Status', (r) => `${statusTag(r.status)}${r.featured ? ' <span class="tag" style="--c:#f26836">Utama</span>' : ''}${r.status === 'ditolak' && r.review_note ? `<span class="t-sub" style="max-width:260px;white-space:normal">Catatan WMM: ${esc(r.review_note)}</span>` : ''}${r.status === 'publish' && r.reviewed_by ? `<span class="t-sub">Disetujui ${esc(r.reviewed_by)}</span>` : ''}${r.rev_state ? `<br><span class="tag ${{ review: 'wait', ditolak: 'bad', draft: 'draft' }[r.rev_state]}" style="margin-top:4px">${{ review: 'Revisi menunggu WMM', ditolak: 'Revisi dikembalikan', draft: 'Draf revisi' }[r.rev_state]}</span>${r.rev_state === 'ditolak' && r.rev_note ? `<span class="t-sub" style="max-width:260px;white-space:normal">Catatan WMM: ${esc(r.rev_note)}</span>` : ''}` : ''}`],
     ],
     main: () => [
       { k: 'title', label: 'Judul', required: true, max: 200 },
@@ -411,7 +513,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 27</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 28</span>
       </div>
     </aside>
     <div class="main">
@@ -473,7 +575,7 @@ async function listView(view, key) {
     $('#tbl').innerHTML = d.items.length ? `<table><thead><tr>${cols.map(([h]) => `<th>${h}</th>`).join('')}<th></th></tr></thead><tbody>
       ${d.items.map((r) => `<tr>${cols.map(([, fn]) => `<td>${fn(r)}</td>`).join('')}<td class="act">
         ${R.view && R.view(r) ? `<a class="btn btn-line btn-sm" href="${R.view(r)}" target="_blank" title="Lihat">${ic('ext')}</a>` : ''}
-        <a class="btn btn-line btn-sm" href="#/${key}/${r.id}">${isGuru() && r.status === 'publish' ? 'Lihat' : 'Ubah'}</a>${isGuru() && r.status === 'publish' ? '' : `<button class="btn btn-danger btn-sm" data-del="${r.id}">Hapus</button>`}</td></tr>`).join('')}
+        <a class="btn btn-line btn-sm" href="#/${key}/${r.id}">${ic('pen')}Edit</a>${isGuru() && r.status === 'publish' ? '' : `<button class="btn btn-danger btn-sm" data-del="${r.id}">Hapus</button>`}</td></tr>`).join('')}
       </tbody></table>` : `<div class="empty">Belum ada data. <a href="#/${key}/new" style="color:var(--blue);font-weight:700">Tambah ${R.single} pertama</a></div>`;
     $('#pg').innerHTML = d.pages > 1 ? Array.from({ length: d.pages }, (_, i) => `<button class="${i + 1 === page ? 'on' : ''}" data-p="${i + 1}">${i + 1}</button>`).join('') : '';
   };
@@ -498,17 +600,18 @@ async function editView(view, key, id) {
   const main = R.main(), side = R.side ? R.side() : [];
   const all = [...main, ...side];
   const guruPost = key === 'posts' && isGuru();
-  if (guruPost && item.status === 'publish') {
-    view.innerHTML = `<div class="notice info">Tulisan ini sudah <b>tayang</b> di website (disetujui ${esc(item.reviewed_by || 'WMM')}). Tulisan yang sudah tayang tidak dapat diubah lagi; hubungi WMM bila perlu revisi.</div>
-      <div class="box"><h3>${esc(item.title)}</h3><div class="rich-view">${item.content || ''}</div><a class="btn btn-line" href="/berita/${esc(item.slug)}" target="_blank">${ic('ext')}Lihat di website</a></div>`;
-    return;
-  }
-  view.innerHTML = `${guruPost ? `<div class="notice ${item.status === 'ditolak' ? 'bad' : 'info'}">${item.status === 'ditolak' ? `<b>Perlu revisi.</b> Catatan dari ${esc(item.reviewed_by || 'WMM')}: ${esc(item.review_note || '-')}<br>Perbaiki tulisan lalu klik <b>Kirim ke WMM</b> lagi.`
+  const isRev = guruPost && item.status === 'publish'; // edit tulisan yang sudah tayang = revisi
+  if (isRev && item.rev_data) { try { Object.assign(item, JSON.parse(item.rev_data)); } catch { /* abaikan */ } }
+  if (isRev) setHead('Edit tulisan yang sudah tayang', `<a class="btn btn-line" href="/berita/${esc(item.slug)}" target="_blank">${ic('ext')}Lihat versi tayang</a><a class="btn btn-line" href="#/${key}">Kembali</a>`);
+  view.innerHTML = `${isRev ? `<div class="notice ${item.rev_state === 'ditolak' ? 'bad' : 'info'}">${item.rev_state === 'ditolak' ? `<b>Revisi dikembalikan.</b> Catatan dari ${esc(item.reviewed_by || 'WMM')}: ${esc(item.rev_note || '-')}<br>Perbaiki lalu klik <b>Kirim revisi ke WMM</b> lagi.<br>`
+      : item.rev_state === 'review' ? '<b>Revisi sedang menunggu persetujuan WMM.</b> Anda masih boleh memperbaikinya. '
+      : ''}Tulisan ini <b>sudah tayang</b>. Perubahan Anda disimpan sebagai <b>revisi</b> dan dikirim ke WMM; versi yang tayang sekarang <b>tidak berubah</b> sampai revisi disetujui.</div>`
+    : guruPost ? `<div class="notice ${item.status === 'ditolak' ? 'bad' : 'info'}">${item.status === 'ditolak' ? `<b>Perlu revisi.</b> Catatan dari ${esc(item.reviewed_by || 'WMM')}: ${esc(item.review_note || '-')}<br>Perbaiki tulisan lalu klik <b>Kirim ke WMM</b> lagi.`
       : item.status === 'review' ? '<b>Sedang menunggu persetujuan WMM.</b> Anda masih boleh memperbaikinya; tulisan akan tetap dalam antrean.'
       : 'Tulisan Anda <b>tidak langsung tayang</b>. Setelah klik <b>Kirim ke WMM</b>, tulisan diperiksa Waka Manajemen Mutu terlebih dahulu. Nama Anda akan tercantum sebagai penulis.'}</div>` : ''}<form id="f" novalidate><div class="${side.length ? 'form-grid' : ''}">
     <div class="box"><div class="fields">${main.map((f) => fieldHtml(f, item[f.k])).join('')}</div></div>
     ${side.length ? `<div class="box"><div class="fields">${side.map((f) => fieldHtml(f, item[f.k])).join('')}</div>
-      <div class="form-actions">${guruPost ? `<button class="btn btn-line btn-block" type="submit" data-st="draft">Simpan draf</button><button class="btn btn-primary btn-block" type="submit" data-st="review">${ic('check')}Kirim ke WMM</button>` : '<button class="btn btn-primary btn-block" type="submit">Simpan</button>'}</div></div>` : ''}
+      <div class="form-actions">${guruPost ? `<button class="btn btn-line btn-block" type="submit" data-st="draft">${isRev ? 'Simpan draf revisi' : 'Simpan draf'}</button><button class="btn btn-primary btn-block" type="submit" data-st="review">${ic('check')}${isRev ? 'Kirim revisi ke WMM' : 'Kirim ke WMM'}</button>${isRev && item.rev_state ? '<button class="btn btn-danger btn-block" type="button" id="cancelRev">Batalkan revisi</button>' : ''}` : '<button class="btn btn-primary btn-block" type="submit">Simpan</button>'}</div></div>` : ''}
   </div>${side.length ? '' : `<div class="form-actions"><a class="btn btn-line" href="#/${key}">Batal</a><button class="btn btn-primary" type="submit">Simpan</button></div>`}</form>`;
   bindForm(view, all);
   if (key === 'posts') bindVideoPreview(view);
@@ -519,6 +622,10 @@ async function editView(view, key, id) {
     const dl = document.createElement('datalist'); dl.id = 'catlist';
     dl.innerHTML = [...new Set([...used, ...sug])].map((c) => `<option value="${esc(c)}">`).join(''); view.appendChild(dl);
   }
+  if ($('#cancelRev')) $('#cancelRev').onclick = async () => {
+    if (!confirm('Batalkan revisi? Tulisan yang tayang tetap seperti sekarang.')) return;
+    try { await api(`admin/${key}/${id}`, { method: 'PUT', body: { cancel_revision: 1 } }); toast('Revisi dibatalkan'); location.hash = `#/${key}`; } catch (er) { toast(er.message, true); }
+  };
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const data = readForm(view, all);
@@ -534,7 +641,7 @@ async function editView(view, key, id) {
     const btns = $$('button[type=submit]', view); btns.forEach((b) => (b.disabled = true));
     try {
       await api(`admin/${key}${id ? '/' + id : ''}`, { method: id ? 'PUT' : 'POST', body: data });
-      toast(guruPost ? (data.status === 'review' ? 'Terkirim ke WMM. Anda akan melihat statusnya di "Tulisan Saya".' : 'Draf tersimpan') : 'Tersimpan'); location.hash = `#/${key}`;
+      toast(isRev ? (data.status === 'review' ? 'Revisi terkirim ke WMM. Versi yang tayang tetap sampai revisi disetujui.' : 'Draf revisi tersimpan') : guruPost ? (data.status === 'review' ? 'Terkirim ke WMM. Anda akan melihat statusnya di "Tulisan Saya".' : 'Draf tersimpan') : 'Tersimpan'); location.hash = `#/${key}`;
     } catch (er) { toast(er.message, true); btns.forEach((b) => (b.disabled = false)); }
   };
 }
@@ -1196,55 +1303,62 @@ V['profil-guru'] = async (view) => {
 V.review = async (view, id) => {
   if (id) return reviewDetail(view, id);
   setHead('Persetujuan Tulisan Guru');
-  const TABS = [['review', 'Menunggu'], ['ditolak', 'Dikembalikan'], ['publish', 'Sudah tayang']];
+  const TABS = [['review', 'Menunggu'], ['revisi', 'Revisi tulisan tayang'], ['ditolak', 'Dikembalikan'], ['publish', 'Sudah tayang']];
   let tab = sessionStorage.getItem('rvTab') || 'review';
   const load = async () => {
     const d = await api('admin/review?status=' + tab);
     view.innerHTML = `<div class="notice info">Tulisan dari akun <b>Guru Penulis</b> (Opini, Tips & Tutorial, Artikel Praktis) tidak tayang sebelum disetujui di sini. Anda dapat memperbaiki salah ketik sebelum menyetujui, atau mengembalikannya dengan catatan revisi.</div>
       <div class="toolbar">${TABS.map(([v, l]) => `<button class="btn ${v === tab ? 'btn-dark' : 'btn-line'} btn-sm" data-tab="${v}">${l} (${d.counts[v] || 0})</button>`).join('')}</div>
       <div class="table-wrap">${d.items.length ? `<table><thead><tr><th>Tulisan</th><th>Penulis</th><th>Jenis</th><th>${tab === 'publish' ? 'Tayang' : 'Dikirim'}</th><th></th></tr></thead><tbody>${d.items.map((r) => `<tr>
-        <td><span class="t-title">${esc(r.title)}</span><span class="t-sub" style="white-space:normal;max-width:420px">${esc((r.excerpt || '').slice(0, 140))}${tab === 'ditolak' && r.review_note ? `<br><b>Catatan:</b> ${esc(r.review_note)}` : ''}</span></td>
+        <td><span class="t-title">${esc(tab === 'revisi' && r.rev_title ? r.rev_title : r.title)}</span>${tab === 'revisi' && r.rev_title && r.rev_title !== r.title ? `<span class="t-sub">Judul tayang: ${esc(r.title)}</span>` : ''}<span class="t-sub" style="white-space:normal;max-width:420px">${esc((r.excerpt || '').slice(0, 140))}${tab === 'ditolak' && r.review_note ? `<br><b>Catatan:</b> ${esc(r.review_note)}` : ''}</span></td>
         <td><b>${esc(r.author_name || "-")}</b>${r.author_title ? `<span class="t-sub" style="display:block">${esc(r.author_title)}</span>` : ''}</td>
         <td>${esc(CAT_LABEL[r.category] || r.category)}</td>
-        <td>${fmtDate(tab === 'publish' ? r.published_at : r.submitted_at)}${r.reviewed_by && tab !== 'review' ? `<span class="t-sub">oleh ${esc(r.reviewed_by)}</span>` : ''}</td>
-        <td class="act">${tab === 'publish' ? `<a class="btn btn-line btn-sm" href="/berita/${esc(r.slug)}" target="_blank">${ic('ext')}</a>` : ''}<a class="btn ${tab === 'review' ? 'btn-primary' : 'btn-line'} btn-sm" href="#/review/${r.id}">${tab === 'review' ? 'Periksa' : 'Buka'}</a></td></tr>`).join('')}</tbody></table>`
-        : `<div class="empty">${tab === 'review' ? 'Tidak ada tulisan yang menunggu. 👍' : 'Belum ada data.'}</div>`}</div>`;
+        <td>${fmtDate(tab === 'publish' ? r.published_at : tab === 'revisi' ? r.rev_at : r.submitted_at)}${r.reviewed_by && tab !== 'review' ? `<span class="t-sub">oleh ${esc(r.reviewed_by)}</span>` : ''}</td>
+        <td class="act">${['publish', 'revisi'].includes(tab) ? `<a class="btn btn-line btn-sm" href="/berita/${esc(r.slug)}" target="_blank" title="Lihat di website">${ic('ext')}</a>` : ''}<a class="btn ${['review', 'revisi'].includes(tab) ? 'btn-primary' : 'btn-line'} btn-sm" href="#/review/${r.id}${tab === 'revisi' ? '?rev' : ''}">${tab === 'review' || tab === 'revisi' ? 'Periksa' : `${ic('pen')}Edit`}</a></td></tr>`).join('')}</tbody></table>`
+        : `<div class="empty">${tab === 'review' || tab === 'revisi' ? 'Tidak ada yang menunggu. 👍' : 'Belum ada data.'}</div>`}</div>`;
     $$('[data-tab]', view).forEach((b) => b.onclick = () => { tab = b.dataset.tab; sessionStorage.setItem('rvTab', tab); load(); });
   };
   await load();
 };
 async function reviewDetail(view, id) {
-  const { item } = await api('admin/review/' + id);
-  setHead('Periksa tulisan', `<a class="btn btn-line" href="#/review">Kembali</a>`);
+  const rid = String(id).split('?')[0];
+  const { item } = await api('admin/review/' + rid);
+  const rev = item.status === 'publish' && item.rev_data && item.rev_state === 'review';
+  if (rev) { try { Object.assign(item, JSON.parse(item.rev_data)); } catch { /* abaikan */ } }
+  id = rid;
+  setHead(rev ? 'Periksa revisi tulisan' : item.status === 'publish' ? 'Edit tulisan yang sudah tayang' : 'Periksa tulisan', `${item.status === 'publish' ? `<a class="btn btn-line" href="/berita/${esc(item.slug)}" target="_blank">${ic('ext')}Lihat versi tayang</a>` : ''}<a class="btn btn-line" href="#/review">Kembali</a>`);
   const fields = [
     { k: 'title', label: 'Judul', required: true },
     { k: 'content', label: 'Isi tulisan (boleh diperbaiki sebelum disetujui)', type: 'rich' },
     { k: 'video_url', label: 'Link video (YouTube / TikTok / Reels Instagram)', type: 'url' },
   ];
   const side = [{ k: 'category', label: 'Jenis tulisan', type: 'select', opts: GURU_CATS }, { k: 'cover', label: 'Gambar sampul', type: 'image' }];
-  view.innerHTML = `<div class="form-grid"><div class="box"><div class="fields">${fields.map((f) => fieldHtml(f, item[f.k])).join('')}</div></div>
+  view.innerHTML = `${rev ? `<div class="notice info"><b>Revisi dari penulis</b> untuk tulisan yang sudah tayang (dikirim ${fmtDate(item.rev_at)}). Isi di bawah adalah <b>versi revisi</b>; versi lama tetap tayang sampai Anda menyetujui. Anda masih boleh memperbaiki salah ketik.</div>` : item.status === 'publish' ? '<div class="notice info">Tulisan ini sudah tayang. Perubahan yang Anda simpan langsung tampil di website.</div>' : ''}
+  <div class="form-grid"><div class="box"><div class="fields">${fields.map((f) => fieldHtml(f, item[f.k])).join('')}</div></div>
     <div><div class="box"><h3>Penulis</h3><p style="margin:0"><b>${esc(item.author_name || '-')}</b>${item.author_title ? `<br><span class="t-sub" style="display:inline">${esc(item.author_title)}</span>` : ''}</p>
       <p class="t-sub" style="margin:8px 0 0">Dikirim ${fmtDate(item.submitted_at || item.updated_at)} · Status: ${statusTag(item.status)}</p>
       ${item.review_note ? `<p class="t-sub" style="white-space:normal;margin-top:8px">Catatan terakhir: ${esc(item.review_note)}</p>` : ''}</div>
     <div class="box"><div class="fields">${side.map((f) => fieldHtml(f, item[f.k])).join('')}
       <label class="field" data-k="note"><span>Catatan untuk penulis</span><textarea id="rvNote" rows="4" placeholder="Wajib diisi bila dikembalikan. Opsional bila disetujui (mis. ucapan terima kasih).">${esc(item.status === 'ditolak' ? item.review_note || '' : '')}</textarea></label></div>
-      <div class="form-actions" style="flex-direction:column;align-items:stretch">
+      <div class="form-actions" style="flex-direction:column;align-items:stretch">${rev ? `
+        <button class="btn btn-primary btn-block" data-act="approve">${ic('check')}Setujui revisi & tayangkan</button>
+        <button class="btn btn-danger btn-block" data-act="reject">Kembalikan revisi</button><small class="t-sub" style="text-align:center;white-space:normal">Bila dikembalikan, versi lama tetap tayang.</small>` : `
         <button class="btn btn-primary btn-block" data-act="approve">${ic('check')}${item.status === 'publish' ? 'Simpan perubahan (tetap tayang)' : 'Setujui & tayangkan'}</button>
         <button class="btn btn-danger btn-block" data-act="reject">${item.status === 'publish' ? 'Tarik dari website & kembalikan' : 'Kembalikan untuk revisi'}</button>
-        <button class="btn btn-line btn-block" data-act="save">Simpan perbaikan saja</button></div></div></div></div>`;
+        <button class="btn btn-line btn-block" data-act="save">Simpan perbaikan saja</button>`}</div></div></div></div>`;
   const all = [...fields, ...side];
   bindForm(view, all);
   bindVideoPreview(view);
   view.querySelectorAll('[data-act]').forEach((b) => b.onclick = async () => {
     const act = b.dataset.act, note = $('#rvNote').value.trim();
     if (act === 'reject' && !note) return toast('Tuliskan catatan revisi untuk penulis.', true);
-    if (act === 'approve' && item.status !== 'publish' && !confirm('Setujui dan tayangkan tulisan ini di website?')) return;
-    if (act === 'reject' && item.status === 'publish' && !confirm('Tarik tulisan ini dari website?')) return;
+    if (act === 'approve' && (item.status !== 'publish' || rev) && !confirm(rev ? 'Setujui revisi? Versi revisi langsung menggantikan versi yang tayang.' : 'Setujui dan tayangkan tulisan ini di website?')) return;
+    if (act === 'reject' && item.status === 'publish' && !rev && !confirm('Tarik tulisan ini dari website?')) return;
     const data = readForm(view, all);
     view.querySelectorAll('[data-act]').forEach((x) => (x.disabled = true));
     try {
-      await api('admin/review/' + id, { method: 'POST', body: { ...data, note, action: act } });
-      toast(act === 'approve' ? 'Tulisan disetujui dan tayang di website.' : act === 'reject' ? 'Tulisan dikembalikan ke penulis.' : 'Perbaikan tersimpan.');
+      await api('admin/review/' + id, { method: 'POST', body: { ...data, note, action: act, revision: rev ? 1 : 0 } });
+      toast(rev ? (act === 'approve' ? 'Revisi disetujui dan sudah tayang.' : 'Revisi dikembalikan ke penulis; versi lama tetap tayang.') : act === 'approve' ? (item.status === 'publish' ? 'Perubahan tersimpan dan tayang.' : 'Tulisan disetujui dan tayang di website.') : act === 'reject' ? 'Tulisan dikembalikan ke penulis.' : 'Perbaikan tersimpan.');
       refreshUnread(); location.hash = '#/review';
     } catch (er) { toast(er.message, true); view.querySelectorAll('[data-act]').forEach((x) => (x.disabled = false)); }
   });
