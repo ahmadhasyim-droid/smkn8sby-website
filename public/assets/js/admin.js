@@ -39,6 +39,8 @@ const P = {
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
 };
 const ic = (n) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
@@ -225,7 +227,7 @@ function bindImageTools(ed, area) {
 let docImportP = null;
 const loadDocImport = () => (docImportP ||= new Promise((ok, no) => {
   if (window.DocImport) return ok(window.DocImport);
-  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=29';
+  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=30';
   sc.onload = () => ok(window.DocImport); sc.onerror = () => { docImportP = null; no(new Error('Gagal memuat fitur impor. Periksa koneksi lalu coba lagi.')); };
   document.head.appendChild(sc);
 }));
@@ -301,7 +303,7 @@ const STATUS = () => [{ v: 'publish', l: 'Terbit' }, { v: 'draft', l: 'Draf' }];
 const GURU_CATS = () => [{ v: 'opini', l: 'Opini' }, { v: 'tips', l: 'Tips & Tutorial' }, { v: 'artikel', l: 'Artikel Praktis' }];
 const CATS = () => [{ v: 'kegiatan', l: 'Kegiatan' }, { v: 'berita', l: 'Berita' }, { v: 'prestasi', l: 'Prestasi' }, { v: 'pengumuman', l: 'Pengumuman' }, ...GURU_CATS()];
 const CAT_LABEL = Object.fromEntries([{ v: 'kegiatan', l: 'Kegiatan' }, { v: 'berita', l: 'Berita' }, { v: 'prestasi', l: 'Prestasi' }, { v: 'pengumuman', l: 'Pengumuman' }, { v: 'opini', l: 'Opini' }, { v: 'tips', l: 'Tips & Tutorial' }, { v: 'artikel', l: 'Artikel Praktis' }].map((c) => [c.v, c.l]));
-const STATUS_TAG = { publish: ['ok', 'Terbit'], draft: ['draft', 'Draf'], review: ['wait', 'Menunggu persetujuan WMM'], ditolak: ['bad', 'Perlu revisi'] };
+const STATUS_TAG = { publish: ['ok', 'Terbit'], draft: ['draft', 'Draf'], review: ['wait', 'Menunggu persetujuan WMM'], ditolak: ['bad', 'Perlu revisi'], arsip: ['draft', 'Diarsipkan'] };
 const statusTag = (st) => { const [c, l] = STATUS_TAG[st] || ['draft', st]; return `<span class="tag ${c}">${l}</span>`; };
 const RES = {
   posts: {
@@ -311,7 +313,7 @@ const RES = {
       ['Judul', (r) => `<span class="t-title">${esc(r.title)}</span><span class="t-sub">${fmtDate(r.published_at)} · ${esc(r.author_name || '')} · ${r.views || 0}× dibaca</span>`],
       ['Unit', (r) => unitTag(r.unit_slug), 'nonGuru'],
       ['Kategori', (r) => esc(CAT_LABEL[r.category] || r.category)],
-      ['Status', (r) => `${statusTag(r.status)}${r.featured ? ' <span class="tag" style="--c:#f26836">Utama</span>' : ''}${r.status === 'ditolak' && r.review_note ? `<span class="t-sub" style="max-width:260px;white-space:normal">Catatan WMM: ${esc(r.review_note)}</span>` : ''}${r.status === 'publish' && r.reviewed_by ? `<span class="t-sub">Disetujui ${esc(r.reviewed_by)}</span>` : ''}${r.rev_state ? `<br><span class="tag ${{ review: 'wait', ditolak: 'bad', draft: 'draft' }[r.rev_state]}" style="margin-top:4px">${{ review: 'Revisi menunggu WMM', ditolak: 'Revisi dikembalikan', draft: 'Draf revisi' }[r.rev_state]}</span>${r.rev_state === 'ditolak' && r.rev_note ? `<span class="t-sub" style="max-width:260px;white-space:normal">Catatan WMM: ${esc(r.rev_note)}</span>` : ''}` : ''}`],
+      ['Status', (r) => `${statusTag(r.status)}${r.featured ? ' <span class="tag" style="--c:#f26836">Utama</span>' : ''}${(r.status === 'ditolak' || r.status === 'arsip') && r.review_note ? `<span class="t-sub" style="max-width:260px;white-space:normal">Catatan WMM: ${esc(r.review_note)}</span>` : ''}${r.status === 'publish' && r.reviewed_by ? `<span class="t-sub">Disetujui ${esc(r.reviewed_by)}</span>` : ''}${r.rev_state ? `<br><span class="tag ${{ review: 'wait', ditolak: 'bad', draft: 'draft' }[r.rev_state]}" style="margin-top:4px">${{ review: 'Revisi menunggu WMM', ditolak: 'Revisi dikembalikan', draft: 'Draf revisi' }[r.rev_state]}</span>${r.rev_state === 'ditolak' && r.rev_note ? `<span class="t-sub" style="max-width:260px;white-space:normal">Catatan WMM: ${esc(r.rev_note)}</span>` : ''}` : ''}`],
     ],
     main: () => [
       { k: 'title', label: 'Judul', required: true, max: 200 },
@@ -482,7 +484,7 @@ const RES = {
 
 // ---------- Kerangka panel ----------
 function menu() {
-  if (isGuru()) return [['Menulis', [['dashboard', 'Dasbor', 'dash'], ['posts', 'Tulisan Saya', 'pen']]], ['Profil', [['profil', 'Profil / CV Saya', 'idcard'], ['cv', 'Download CV (PDF)', 'dl']]]];
+  if (isGuru()) return [['Menulis', [['dashboard', 'Dasbor', 'dash'], ['notif', 'Notifikasi', 'bell'], ['posts', 'Tulisan Saya', 'pen']]], ['Profil', [['profil', 'Profil / CV Saya', 'idcard'], ['cv', 'Download CV (PDF)', 'dl']]]];
   const u = ME.unit_slug, items = [['dashboard', 'Dasbor', 'dash'], ['posts', 'Berita & Kegiatan', 'news'], ['agenda', 'Agenda', 'cal'], ['gallery', 'Galeri', 'img'], ['prestasi', 'Prestasi Siswa', 'trophy']];
   if (isAdmin() || UNIT[u]?.type === 'waka') items.splice(1, 0, ['program', 'Program Sekolah', 'clip']);
   if (canReview()) items.splice(1, 0, ['review', 'Persetujuan Tulisan', 'check']);
@@ -508,12 +510,12 @@ function renderShell() {
     <aside class="side" id="side">
       <div class="side-brand"><img src="/assets/img/emblem-smkn8.png" alt=""><div><b>SMKN 8 Surabaya</b><span>Panel pengelola</span></div></div>
       <div class="side-role"><b>${esc(ME.name || ME.username)}</b><small>${isAdmin() ? 'Administrator sekolah' : isGuru() ? 'Guru penulis' + (ME.title ? ' · ' + esc(ME.title) : '') : `Pengelola ${esc(un?.name || ME.unit_slug)}`}</small></div>
-      <nav id="menu">${menu().map(([g, it]) => `<div class="grp">${esc(g)}</div>${it.map(([h, l, i]) => `<a href="${h.startsWith('/') ? h : '#/' + h}" data-h="${h}">${ic(i)}${esc(l)}${h === 'messages' ? '<span class="count" id="unread" hidden></span>' : h === 'review' ? '<span class="count" id="pending" hidden></span>' : ''}</a>`).join('')}`).join('')}</nav>
+      <nav id="menu">${menu().map(([g, it]) => `<div class="grp">${esc(g)}</div>${it.map(([h, l, i]) => `<a href="${h.startsWith('/') ? h : '#/' + h}" data-h="${h}">${ic(i)}${esc(l)}${h === 'messages' ? '<span class="count" id="unread" hidden></span>' : h === 'review' ? '<span class="count" id="pending" hidden></span>' : h === 'notif' ? '<span class="count" id="notifc" hidden></span>' : ''}</a>`).join('')}`).join('')}</nav>
       <div class="side-foot">
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 29</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 30</span>
       </div>
     </aside>
     <div class="main">
@@ -606,6 +608,7 @@ async function editView(view, key, id) {
   view.innerHTML = `${isRev ? `<div class="notice ${item.rev_state === 'ditolak' ? 'bad' : 'info'}">${item.rev_state === 'ditolak' ? `<b>Revisi dikembalikan.</b> Catatan dari ${esc(item.reviewed_by || 'WMM')}: ${esc(item.rev_note || '-')}<br>Perbaiki lalu klik <b>Kirim revisi ke WMM</b> lagi.<br>`
       : item.rev_state === 'review' ? '<b>Revisi sedang menunggu persetujuan WMM.</b> Anda masih boleh memperbaikinya. '
       : ''}Tulisan ini <b>sudah tayang</b>. Perubahan Anda disimpan sebagai <b>revisi</b> dan dikirim ke WMM; versi yang tayang sekarang <b>tidak berubah</b> sampai revisi disetujui.</div>`
+    : guruPost && item.status === 'arsip' ? `<div class="notice bad"><b>Tulisan ini diarsipkan</b>${item.archive_reason === 'auto' ? ' otomatis karena belum direvisi dalam batas waktu' : ` oleh ${esc(item.reviewed_by || 'WMM')}`}.${item.review_note ? ` Catatan WMM: ${esc(item.review_note)}` : ''}<br>Anda masih dapat memperbaikinya lalu klik <b>Kirim ke WMM</b> untuk diperiksa ulang, atau menghapusnya dari <b>Tulisan Saya</b>.</div>`
     : guruPost ? `<div class="notice ${item.status === 'ditolak' ? 'bad' : 'info'}">${item.status === 'ditolak' ? `<b>Perlu revisi.</b> Catatan dari ${esc(item.reviewed_by || 'WMM')}: ${esc(item.review_note || '-')}<br>Perbaiki tulisan lalu klik <b>Kirim ke WMM</b> lagi.`
       : item.status === 'review' ? '<b>Sedang menunggu persetujuan WMM.</b> Anda masih boleh memperbaikinya; tulisan akan tetap dalam antrean.'
       : 'Tulisan Anda <b>tidak langsung tayang</b>. Setelah klik <b>Kirim ke WMM</b>, tulisan diperiksa Waka Manajemen Mutu terlebih dahulu. Nama Anda akan tercantum sebagai penulis.'}</div>` : ''}<form id="f" novalidate><div class="${side.length ? 'form-grid' : ''}">
@@ -779,6 +782,11 @@ V.settings = async (view) => {
       { k: 'notif_email', label: 'Kirim salinan setiap pesan masuk ke email', type: 'text', placeholder: 'email@smkn8-sby.sch.id', help: 'Boleh lebih dari satu, pisahkan dengan koma (maks. 5). Kosongkan untuk mematikan.' },
       { k: 'notif_from', label: 'Alamat pengirim', type: 'text', placeholder: 'noreply@smkn8-sby.sch.id', help: 'Harus memakai domain yang sudah diverifikasi di Resend (lihat README bagian "Notifikasi email").' },
     ]],
+    ['Persetujuan tulisan guru', [
+      { k: 'review_archive_days', label: 'Arsipkan otomatis tulisan yang dikembalikan & tidak direvisi setelah', type: 'select', half: true,
+        opts: () => [{ v: '14', l: '14 hari' }, { v: '30', l: '30 hari' }, { v: '60', l: '60 hari' }, { v: '90', l: '90 hari' }, { v: '0', l: 'Jangan arsipkan otomatis' }],
+        help: 'Tulisan pindah dari tab "Dikembalikan" ke "Arsip" (tidak dihapus). Guru diberi notifikasi dan tetap bisa merevisi lalu mengirim ulang.' },
+    ]],
     ['Layanan Pengaduan (WhatsApp)', [
       { k: 'show_pengaduan', label: 'Tombol pengaduan di website', type: 'select', half: true, opts: () => [{ v: '1', l: 'Tampilkan' }, { v: '0', l: 'Sembunyikan' }], help: 'Ikon petugas melayang di pojok kanan bawah setiap halaman.' },
       { k: 'pengaduan_wa', label: 'Nomor WhatsApp penerima', half: true, placeholder: '628113410120', help: 'Format 62…, tanpa tanda + atau spasi.' },
@@ -908,12 +916,27 @@ function profileCard(p) {
     <div class="meter"><i style="width:${c}%"></i></div><small>Kelengkapan ${c}%</small></div></div>
     <div class="pc-r"><a class="btn btn-primary btn-sm" href="#/profil">${ic('pen')}${p ? 'Perbarui profil' : 'Isi profil'}</a>${p ? `<a class="btn btn-line btn-sm" href="/guru/${encodeURIComponent(p.slug)}" target="_blank">${ic('eye')}Lihat</a><a class="btn btn-line btn-sm" href="#/cv">${ic('dl')}Download CV</a>` : ''}</div></div>`;
 }
+const NOTIF_KIND = { publish: ['ok', 'check'], ditolak: ['bad', 'pen'], arsip: ['draft', 'archive'], pengingat: ['wait', 'bell'], hapus: ['bad', 'trash'] };
+const timeAgo = (iso) => { const m = Math.round((Date.now() - Date.parse(iso)) / 6e4); return m < 1 ? 'baru saja' : m < 60 ? `${m} menit lalu` : m < 1440 ? `${Math.round(m / 60)} jam lalu` : m < 43200 ? `${Math.round(m / 1440)} hari lalu` : fmtDate(iso); };
+const notifItem = (n) => { const [c, i] = NOTIF_KIND[n.kind] || ['draft', 'bell'];
+  return `<a class="notif-item ${n.read_at ? '' : 'unread'} k-${c}" href="${esc(n.link || '#/posts')}" data-nid="${n.id}"${/^\//.test(n.link || '') ? ' target="_blank"' : ''}><span class="ni-ic">${ic(i)}</span><span class="ni-tx"><b>${esc(n.title)}</b>${n.body ? `<span>${esc(n.body)}</span>` : ''}<small>${timeAgo(n.created_at)}</small></span></a>`; };
+V.notif = async (view) => {
+  setHead('Notifikasi', '<button class="btn btn-line" id="nAll">Tandai semua dibaca</button>');
+  const load = async () => {
+    const d = await api('admin/notif');
+    view.innerHTML = `<div class="box notif-box">${d.items.length ? d.items.map(notifItem).join('') : '<div class="empty">Belum ada notifikasi. Keputusan WMM atas tulisan Anda akan muncul di sini.</div>'}</div>`;
+    $$('[data-nid]', view).forEach((a) => a.addEventListener('click', () => api('admin/notif', { method: 'POST', body: { id: +a.dataset.nid } }).then(refreshUnread).catch(() => {})));
+  };
+  $('#nAll').onclick = async () => { await api('admin/notif', { method: 'POST', body: { all: 1 } }); await load(); refreshUnread(); toast('Semua notifikasi ditandai dibaca'); };
+  await load();
+};
 function guruDashboard(view, d) {
-  const stats = [[d.publish, 'Tulisan tayang', '#16966a'], [d.review, 'Menunggu persetujuan', '#d98a06'], [d.ditolak, 'Perlu revisi', '#d4364b'], [d.draft, 'Draf', '#5a6474'], [d.views, 'Total dibaca', '#235ba4']];
+  const stats = [[d.publish, 'Tulisan tayang', '#16966a'], [d.review, 'Menunggu persetujuan', '#d98a06'], [d.ditolak, 'Perlu revisi', '#d4364b'], [d.draft, 'Draf', '#5a6474'], ...(d.arsip ? [[d.arsip, 'Diarsipkan', '#8792a2']] : []), [d.views, 'Total dibaca', '#235ba4']];
   view.innerHTML = `
     <div class="welcome"><div><span class="mono" style="color:var(--sky)">Guru penulis</span>
       <h2>Halo, ${esc(ME.name || ME.username)}</h2><p>Bagikan opini, tips & tutorial, atau artikel praktis Anda untuk website SMKN 8 Surabaya. Setiap tulisan diperiksa Waka Manajemen Mutu (WMM) sebelum tayang.</p></div>
       <div><a class="btn btn-primary" href="#/posts/new">${ic('pen')}Tulis artikel baru</a></div></div>
+    ${d.notifs?.length ? `<div class="box notif-box"><div class="nb-head"><h3>${ic('bell')}Notifikasi baru <span class="count">${d.notif}</span></h3><a class="btn btn-line btn-sm" href="#/notif">Lihat semua</a></div>${d.notifs.map(notifItem).join('')}</div>` : ''}
     ${profileCard(d.profile)}
     ${d.ditolak ? `<div class="notice bad">${ic('pen')} Ada <b>${d.ditolak} tulisan</b> yang dikembalikan WMM untuk direvisi. Buka <a href="#/posts" style="font-weight:700">Tulisan Saya</a> untuk melihat catatannya.</div>` : ''}
     <div class="grid-stats">${stats.map(([v, l, c]) => `<div class="stat" style="--c:${c}"><b>${v}</b><span>${l}</span></div>`).join('')}</div>
@@ -923,8 +946,9 @@ function guruDashboard(view, d) {
         <li>Klik <b>Tulis artikel baru</b>, pilih jenis: <b>Opini</b>, <b>Tips & Tutorial</b>, atau <b>Artikel Praktis</b>.</li>
         <li>Tulis isi, tambahkan gambar bila perlu, lalu <b>Simpan draf</b> atau langsung <b>Kirim ke WMM</b>.</li>
         <li>WMM memeriksa: <b>disetujui</b> → tayang di website dengan nama Anda sebagai penulis; atau <b>dikembalikan</b> dengan catatan revisi.</li>
-        <li>Tulisan yang dikembalikan bisa diperbaiki lalu dikirim lagi.</li></ol></div>
+        <li>Tulisan yang dikembalikan bisa diperbaiki lalu dikirim lagi. Bila tidak diperbaiki dalam batas waktu, tulisan otomatis masuk <b>Arsip</b> (tidak dihapus).</li></ol></div>
     </div>`;
+  $$('[data-nid]', view).forEach((a) => a.addEventListener('click', () => api('admin/notif', { method: 'POST', body: { id: +a.dataset.nid } }).then(refreshUnread).catch(() => {})));
 }
 
 // ---------- Profil / CV guru ----------
@@ -1308,20 +1332,33 @@ V['profil-guru'] = async (view) => {
 V.review = async (view, id) => {
   if (id) return reviewDetail(view, id);
   setHead('Persetujuan Tulisan Guru');
-  const TABS = [['review', 'Menunggu'], ['revisi', 'Revisi tulisan tayang'], ['ditolak', 'Dikembalikan'], ['publish', 'Sudah tayang']];
+  const TABS = [['review', 'Menunggu'], ['revisi', 'Revisi tulisan tayang'], ['ditolak', 'Dikembalikan'], ['publish', 'Sudah tayang'], ['arsip', 'Arsip']];
+  const days = (iso) => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5));
   let tab = sessionStorage.getItem('rvTab') || 'review';
   const load = async () => {
     const d = await api('admin/review?status=' + tab);
     view.innerHTML = `<div class="notice info">Tulisan dari akun <b>Guru Penulis</b> (Opini, Tips & Tutorial, Artikel Praktis) tidak tayang sebelum disetujui di sini. Anda dapat memperbaiki salah ketik sebelum menyetujui, atau mengembalikannya dengan catatan revisi.</div>
       <div class="toolbar">${TABS.map(([v, l]) => `<button class="btn ${v === tab ? 'btn-dark' : 'btn-line'} btn-sm" data-tab="${v}">${l} (${d.counts[v] || 0})</button>`).join('')}</div>
-      <div class="table-wrap">${d.items.length ? `<table><thead><tr><th>Tulisan</th><th>Penulis</th><th>Jenis</th><th>${tab === 'publish' ? 'Tayang' : 'Dikirim'}</th><th></th></tr></thead><tbody>${d.items.map((r) => `<tr>
-        <td><span class="t-title">${esc(tab === 'revisi' && r.rev_title ? r.rev_title : r.title)}</span>${tab === 'revisi' && r.rev_title && r.rev_title !== r.title ? `<span class="t-sub">Judul tayang: ${esc(r.title)}</span>` : ''}<span class="t-sub" style="white-space:normal;max-width:420px">${esc((r.excerpt || '').slice(0, 140))}${tab === 'ditolak' && r.review_note ? `<br><b>Catatan:</b> ${esc(r.review_note)}` : ''}</span></td>
+      ${tab === 'ditolak' ? `<div class="notice info" style="margin-top:-6px">Tulisan di sini menunggu diperbaiki penulis. Gunakan <b>Ingatkan</b> untuk mengirim notifikasi pengingat, atau <b>Arsipkan</b> bila tulisan tidak layak terbit.${d.archiveDays ? ` Tulisan yang tidak direvisi dalam <b>${d.archiveDays} hari</b> otomatis pindah ke tab Arsip.` : ''}</div>` : ''}
+      ${tab === 'arsip' ? '<div class="notice info" style="margin-top:-6px">Arsip berisi tulisan yang tidak layak terbit atau tidak direvisi penulis. Tulisan di sini <b>tidak tampil di daftar persetujuan</b>, namun penulis tetap bisa memperbaikinya dan mengirim ulang. Anda dapat menghapusnya permanen bila sudah tidak diperlukan.</div>' : ''}
+      <div class="table-wrap">${d.items.length ? `<table><thead><tr><th>Tulisan</th><th>Penulis</th><th>Jenis</th><th>${{ publish: 'Tayang', ditolak: 'Dikembalikan', arsip: 'Diarsipkan', revisi: 'Revisi dikirim' }[tab] || 'Dikirim'}</th><th></th></tr></thead><tbody>${d.items.map((r) => `<tr>
+        <td><span class="t-title">${esc(tab === 'revisi' && r.rev_title ? r.rev_title : r.title)}</span>${tab === 'revisi' && r.rev_title && r.rev_title !== r.title ? `<span class="t-sub">Judul tayang: ${esc(r.title)}</span>` : ''}<span class="t-sub" style="white-space:normal;max-width:420px">${esc((r.excerpt || '').slice(0, 140))}${(tab === 'ditolak' || tab === 'arsip') && r.review_note ? `<br><b>Catatan:</b> ${esc(r.review_note)}` : ''}</span></td>
         <td><b>${esc(r.author_name || "-")}</b>${r.author_title ? `<span class="t-sub" style="display:block">${esc(r.author_title)}</span>` : ''}</td>
         <td>${esc(CAT_LABEL[r.category] || r.category)}</td>
-        <td>${fmtDate(tab === 'publish' ? r.published_at : tab === 'revisi' ? r.rev_at : r.submitted_at)}${r.reviewed_by && tab !== 'review' ? `<span class="t-sub">oleh ${esc(r.reviewed_by)}</span>` : ''}</td>
-        <td class="act">${['publish', 'revisi'].includes(tab) ? `<a class="btn btn-line btn-sm" href="/berita/${esc(r.slug)}" target="_blank" title="Lihat di website">${ic('ext')}</a>` : ''}<a class="btn ${['review', 'revisi'].includes(tab) ? 'btn-primary' : 'btn-line'} btn-sm" href="#/review/${r.id}${tab === 'revisi' ? '?rev' : ''}">${tab === 'review' || tab === 'revisi' ? 'Periksa' : `${ic('pen')}Edit`}</a></td></tr>`).join('')}</tbody></table>`
+        <td>${tab === 'ditolak' ? `${fmtDate(r.reviewed_at)}<span class="t-sub" style="display:block">${days(r.reviewed_at)} hari lalu${d.archiveDays ? ` · arsip otomatis ${Math.max(0, d.archiveDays - days(r.reviewed_at))} hari lagi` : ''}</span>${r.reminded_at ? `<span class="t-sub" style="display:block">Diingatkan ${fmtDate(r.reminded_at)}</span>` : ''}` : tab === 'arsip' ? `${fmtDate(r.archived_at)}<span class="t-sub" style="display:block">${r.archive_reason === 'auto' ? 'Otomatis: tidak direvisi' : 'Diarsipkan WMM'}</span>` : fmtDate(tab === 'publish' ? r.published_at : tab === 'revisi' ? r.rev_at : r.submitted_at)}${r.reviewed_by && tab !== 'review' ? `<span class="t-sub" style="display:block">oleh ${esc(r.reviewed_by)}</span>` : ''}</td>
+        <td class="act">${['publish', 'revisi'].includes(tab) ? `<a class="btn btn-line btn-sm" href="/berita/${esc(r.slug)}" target="_blank" title="Lihat di website">${ic('ext')}</a>` : ''}<a class="btn ${['review', 'revisi'].includes(tab) ? 'btn-primary' : 'btn-line'} btn-sm" href="#/review/${r.id}${tab === 'revisi' ? '?rev' : ''}">${tab === 'review' || tab === 'revisi' ? 'Periksa' : tab === 'publish' ? `${ic('pen')}Edit` : 'Buka'}</a>${tab === 'ditolak' ? `<button class="btn btn-line btn-sm" data-remind="${r.id}" title="Kirim notifikasi pengingat ke penulis">${ic('bell')}Ingatkan</button><button class="btn btn-line btn-sm" data-arch="${r.id}">${ic('archive')}Arsipkan</button>` : ''}${tab === 'arsip' ? `<button class="btn btn-danger btn-sm" data-purge="${r.id}">Hapus permanen</button>` : ''}</td></tr>`).join('')}</tbody></table>`
         : `<div class="empty">${tab === 'review' || tab === 'revisi' ? 'Tidak ada yang menunggu. 👍' : 'Belum ada data.'}</div>`}</div>`;
     $$('[data-tab]', view).forEach((b) => b.onclick = () => { tab = b.dataset.tab; sessionStorage.setItem('rvTab', tab); load(); });
+    $$('[data-remind]', view).forEach((b) => b.onclick = async () => { try { await api('admin/review/' + b.dataset.remind, { method: 'POST', body: { action: 'remind' } }); toast('Pengingat terkirim ke penulis'); load(); } catch (e) { toast(e.message, true); } });
+    $$('[data-arch]', view).forEach((b) => b.onclick = async () => {
+      const note = prompt('Alasan pengarsipan (akan dikirim ke penulis):', 'Tulisan belum direvisi sesuai catatan.');
+      if (note === null) return; if (!note.trim()) return toast('Alasan wajib diisi.', true);
+      try { await api('admin/review/' + b.dataset.arch, { method: 'POST', body: { action: 'archive', note: note.trim() } }); toast('Tulisan dipindah ke Arsip'); load(); refreshUnread(); } catch (e) { toast(e.message, true); }
+    });
+    $$('[data-purge]', view).forEach((b) => b.onclick = async () => {
+      if (!confirm('Hapus tulisan ini secara PERMANEN? Tindakan tidak dapat dibatalkan. Penulis akan diberi notifikasi.')) return;
+      try { await api('admin/review/' + b.dataset.purge, { method: 'DELETE' }); toast('Tulisan dihapus permanen'); load(); } catch (e) { toast(e.message, true); }
+    });
   };
   await load();
 };
@@ -1344,26 +1381,28 @@ async function reviewDetail(view, id) {
       <p class="t-sub" style="margin:8px 0 0">Dikirim ${fmtDate(item.submitted_at || item.updated_at)} · Status: ${statusTag(item.status)}</p>
       ${item.review_note ? `<p class="t-sub" style="white-space:normal;margin-top:8px">Catatan terakhir: ${esc(item.review_note)}</p>` : ''}</div>
     <div class="box"><div class="fields">${side.map((f) => fieldHtml(f, item[f.k])).join('')}
-      <label class="field" data-k="note"><span>Catatan untuk penulis</span><textarea id="rvNote" rows="4" placeholder="Wajib diisi bila dikembalikan. Opsional bila disetujui (mis. ucapan terima kasih).">${esc(item.status === 'ditolak' ? item.review_note || '' : '')}</textarea></label></div>
+      <label class="field" data-k="note"><span>Catatan untuk penulis</span><textarea id="rvNote" rows="4" placeholder="Wajib diisi bila dikembalikan/diarsipkan. Opsional bila disetujui (mis. ucapan terima kasih).">${esc(item.status === 'ditolak' ? item.review_note || '' : '')}</textarea></label></div>
       <div class="form-actions" style="flex-direction:column;align-items:stretch">${rev ? `
         <button class="btn btn-primary btn-block" data-act="approve">${ic('check')}Setujui revisi & tayangkan</button>
         <button class="btn btn-danger btn-block" data-act="reject">Kembalikan revisi</button><small class="t-sub" style="text-align:center;white-space:normal">Bila dikembalikan, versi lama tetap tayang.</small>` : `
         <button class="btn btn-primary btn-block" data-act="approve">${ic('check')}${item.status === 'publish' ? 'Simpan perubahan (tetap tayang)' : 'Setujui & tayangkan'}</button>
         <button class="btn btn-danger btn-block" data-act="reject">${item.status === 'publish' ? 'Tarik dari website & kembalikan' : 'Kembalikan untuk revisi'}</button>
-        <button class="btn btn-line btn-block" data-act="save">Simpan perbaikan saja</button>`}</div></div></div></div>`;
+        <button class="btn btn-line btn-block" data-act="save">Simpan perbaikan saja</button>
+        ${item.status !== 'publish' && item.status !== 'arsip' ? `<button class="btn btn-line btn-block" data-act="archive">${ic('archive')}Arsipkan (tidak layak terbit)</button>` : ''}`}</div></div></div></div>`;
   const all = [...fields, ...side];
   bindForm(view, all);
   bindVideoPreview(view);
   view.querySelectorAll('[data-act]').forEach((b) => b.onclick = async () => {
     const act = b.dataset.act, note = $('#rvNote').value.trim();
-    if (act === 'reject' && !note) return toast('Tuliskan catatan revisi untuk penulis.', true);
+    if ((act === 'reject' || act === 'archive') && !note) return toast(act === 'archive' ? 'Tuliskan alasan pengarsipan untuk penulis.' : 'Tuliskan catatan revisi untuk penulis.', true);
+    if (act === 'archive' && !confirm('Pindahkan tulisan ini ke Arsip? Penulis akan diberi notifikasi dan tetap bisa merevisi.')) return;
     if (act === 'approve' && (item.status !== 'publish' || rev) && !confirm(rev ? 'Setujui revisi? Versi revisi langsung menggantikan versi yang tayang.' : 'Setujui dan tayangkan tulisan ini di website?')) return;
     if (act === 'reject' && item.status === 'publish' && !rev && !confirm('Tarik tulisan ini dari website?')) return;
     const data = readForm(view, all);
     view.querySelectorAll('[data-act]').forEach((x) => (x.disabled = true));
     try {
       await api('admin/review/' + id, { method: 'POST', body: { ...data, note, action: act, revision: rev ? 1 : 0 } });
-      toast(rev ? (act === 'approve' ? 'Revisi disetujui dan sudah tayang.' : 'Revisi dikembalikan ke penulis; versi lama tetap tayang.') : act === 'approve' ? (item.status === 'publish' ? 'Perubahan tersimpan dan tayang.' : 'Tulisan disetujui dan tayang di website.') : act === 'reject' ? 'Tulisan dikembalikan ke penulis.' : 'Perbaikan tersimpan.');
+      toast(rev ? (act === 'approve' ? 'Revisi disetujui dan sudah tayang.' : 'Revisi dikembalikan ke penulis; versi lama tetap tayang.') : act === 'approve' ? (item.status === 'publish' ? 'Perubahan tersimpan dan tayang.' : 'Tulisan disetujui dan tayang di website.') : act === 'reject' ? 'Tulisan dikembalikan ke penulis.' : act === 'archive' ? 'Tulisan dipindah ke Arsip.' : 'Perbaikan tersimpan.');
       refreshUnread(); location.hash = '#/review';
     } catch (er) { toast(er.message, true); view.querySelectorAll('[data-act]').forEach((x) => (x.disabled = false)); }
   });
@@ -1547,13 +1586,15 @@ async function route() {
   if (!location.hash.startsWith('#/profil')) window.onbeforeunload = null;
   const [a, b] = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   const view = $('#view');
+  if (!view) return; // panel belum selesai dimuat; route() dipanggil lagi setelah tampilan siap
   $$('#menu a').forEach((x) => x.classList.toggle('on', x.dataset.h === (b && a === 'units' ? `units/${b}` : a || 'dashboard') || (a === 'units' && x.dataset.h === 'units' && isAdmin())));
   $('#side')?.classList.remove('open');
   view.innerHTML = '<div class="empty">Memuat…</div>';
   window.scrollTo(0, 0);
   try {
     if (!a || a === 'dashboard') return await V.dashboard(view);
-    if (isGuru() && !['posts', 'account', 'profil', 'cv'].includes(a)) throw new Error('Akun guru hanya dapat membuka menu Tulisan Saya dan Profil / CV Saya.');
+    if (isGuru() && !['posts', 'account', 'profil', 'cv', 'notif'].includes(a)) throw new Error('Akun guru hanya dapat membuka menu Tulisan Saya dan Profil / CV Saya.');
+    if (a === 'notif') return await V.notif(view);
     if (a === 'cv') { if (!isGuru()) throw new Error('Menu ini untuk akun guru.'); return await V.cv(view); }
     if (a === 'profil') { if (!isGuru()) throw new Error('Profil / CV hanya untuk akun guru.'); return await V.profil(view); }
     if (a === 'review') { if (!canReview()) throw new Error('Menu ini khusus WMM dan admin.'); return await V.review(view, b); }
@@ -1572,6 +1613,9 @@ async function route() {
   } catch (e) { setHead('Oops'); view.innerHTML = `<div class="notice bad">${esc(e.message)}</div>`; }
 }
 async function refreshUnread() {
+  if (isGuru()) {
+    try { const d = await api('admin/notif'); const el = $('#notifc'); if (el) { el.textContent = d.unread || ''; el.hidden = !d.unread; } return d; } catch { return null; }
+  }
   if (!isAdmin() && !isBkk() && !canReview()) return;
   try {
     const d = await api('admin/dashboard');
@@ -1623,7 +1667,8 @@ async function boot() {
     if (!st.user) { ME = null; return authScreen(st.needsSetup); }
     ME = st.user;
     await loadUnits();
-    renderShell(); refreshUnread(); route();
+    renderShell(); route();
+    refreshUnread().then((d) => { if (isGuru() && d?.unread) toast(`Anda punya ${d.unread} notifikasi baru dari WMM. Lihat di menu Notifikasi.`); });
   } catch (e) {
     $('#app').innerHTML = `<div class="boot" style="opacity:1"><div class="notice bad">${esc(e.message)}</div></div>`;
   }

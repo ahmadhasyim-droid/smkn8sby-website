@@ -298,7 +298,7 @@ async function sendNotif(env, db, m, test = false) {
 // ---------------- BACKUP & PEMULIHAN ----------------
 // Tabel yang dicadangkan (sesi login, percobaan login, dan cache feed tidak perlu)
 const BACKUP_SKIP = new Set(['sessions', 'login_attempts', 'cache', 'backup_log']);
-const BACKUP_ORDER = ['settings', 'units', 'users', 'posts', 'agenda', 'gallery', 'programs', 'prestasi', 'lowongan', 'skema', 'dudi', 'messages', 'sarpras_meta', 'sarpras_assets', 'sarpras_bast', 'teacher_profiles', 'media'];
+const BACKUP_ORDER = ['settings', 'units', 'users', 'posts', 'agenda', 'gallery', 'programs', 'prestasi', 'lowongan', 'skema', 'dudi', 'messages', 'sarpras_meta', 'sarpras_assets', 'sarpras_bast', 'teacher_profiles', 'notifications', 'media'];
 async function backupTables(db) {
   const rows = (await db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'`).all()).results.map((r) => r.name);
   const ok = rows.filter((n) => !BACKUP_SKIP.has(n) && /^[a-z_]+$/.test(n));
@@ -529,6 +529,28 @@ async function guruFlags(db) {
 }
 const shareValid = (p, k) => !!(k && p.share_token && /^[a-f0-9]{32}$/.test(k) && k === p.share_token && (!p.share_expires || p.share_expires > now()));
 const shareInfo = (p) => (p.share_token && (!p.share_expires || p.share_expires > now()) ? { token: p.share_token, expires: p.share_expires || null, created: p.share_created } : null);
+
+// ---------------- Notifikasi panel ----------------
+async function notify(db, userId, kind, title, body, link) {
+  if (!userId) return;
+  try {
+    await db.prepare(`INSERT INTO notifications(user_id,kind,title,body,link,created_at) VALUES(?,?,?,?,?,?)`).bind(userId, kind, String(title).slice(0, 200), String(body || '').slice(0, 1000), link || null, now()).run();
+    // simpan maksimal 100 notifikasi terakhir per pengguna
+    await db.prepare(`DELETE FROM notifications WHERE user_id=? AND id NOT IN (SELECT id FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 100)`).bind(userId, userId).run();
+  } catch (_) { /* notifikasi tidak boleh menggagalkan proses utama */ }
+}
+// Tulisan guru yang dikembalikan & tidak direvisi dalam N hari dipindah ke Arsip (tidak dihapus)
+async function autoArchive(db) {
+  const d = parseInt((await db.prepare(`SELECT value FROM settings WHERE key='review_archive_days'`).first('value')) ?? '30', 10);
+  if (!(d > 0)) return 0;
+  const cut = new Date(Date.now() - d * 864e5).toISOString();
+  const rows = (await db.prepare(`SELECT id,title,author_id FROM posts WHERE status='ditolak' AND COALESCE(reviewed_at,updated_at) < ? AND author_id IN (SELECT id FROM users WHERE role='guru') LIMIT 100`).bind(cut).all()).results;
+  for (const r of rows) {
+    await db.prepare(`UPDATE posts SET status='arsip', archived_at=?, archive_reason='auto' WHERE id=?`).bind(now(), r.id).run();
+    await notify(db, r.author_id, 'arsip', `Tulisan "${r.title}" dipindah ke Arsip`, `Tulisan ini dikembalikan untuk direvisi namun belum diperbaiki dalam ${d} hari, sehingga otomatis diarsipkan. Anda tetap dapat memperbaikinya lalu mengirim ulang ke WMM.`, `#/posts/${r.id}`);
+  }
+  return rows.length;
+}
 
 async function handleSarpras(db, req, parts, method, user, body) {
   const [, kind, id] = parts;
@@ -1085,7 +1107,10 @@ export async function onRequest(ctx) {
         const recent = await db.prepare(`SELECT id,slug,title,category,status,review_note,submitted_at,published_at,views FROM posts WHERE author_id=? ORDER BY COALESCE(updated_at,created_at) DESC LIMIT 6`).bind(user.id).all();
         const prof = await db.prepare(`SELECT slug,visibility,hidden,photo,full_name,position,bio,skills,data FROM teacher_profiles WHERE user_id=?`).bind(user.id).first();
         const profile = prof ? { slug: prof.slug, visibility: prof.visibility, hidden: prof.hidden, completeness: completeness(prof), enabled: (await guruFlags(db)).enabled } : null;
-        return json({ guru: true, profile, draft: by.draft || 0, review: by.review || 0, ditolak: by.ditolak || 0, publish: by.publish || 0, views: rows.reduce((a, r) => a + r.v, 0), recent: recent.results });
+        await autoArchive(db);
+        const notifs = (await db.prepare(`SELECT id,kind,title,body,link,created_at FROM notifications WHERE user_id=? AND read_at IS NULL ORDER BY id DESC LIMIT 5`).bind(user.id).all()).results;
+        const notif = (await db.prepare(`SELECT COUNT(*) n FROM notifications WHERE user_id=? AND read_at IS NULL`).bind(user.id).first('n')) || 0;
+        return json({ guru: true, profile, notif, notifs, draft: by.draft || 0, review: by.review || 0, ditolak: by.ditolak || 0, arsip: by.arsip || 0, publish: by.publish || 0, views: rows.reduce((a, r) => a + r.v, 0), recent: recent.results });
       }
       const scope = isAdmin ? '' : ' WHERE unit_slug=?';
       const a = isAdmin ? [] : [user.unit_slug];
@@ -1101,6 +1126,7 @@ export async function onRequest(ctx) {
         extra.backup_last = (await db.prepare(`SELECT created_at FROM backup_log WHERE kind='unduh' ORDER BY id DESC LIMIT 1`).first('created_at')) || null;
         extra.backup_interval = clampInt(await db.prepare(`SELECT value FROM settings WHERE key='backup_interval'`).first('value'), 7, 1, 90);
       }
+      extra.notif = (await db.prepare(`SELECT COUNT(*) n FROM notifications WHERE user_id=? AND read_at IS NULL`).bind(user.id).first('n')) || 0;
       if (canReview(user)) extra.pending = (await db.prepare(`SELECT COUNT(*) n FROM posts WHERE (status='review' OR rev_state='review') AND author_id IN (SELECT id FROM users WHERE role='guru')`).first()).n;
       if (canMessages(user)) extra.unread = (await db.prepare(`SELECT COUNT(*) n FROM messages WHERE is_read=0`).first()).n;
       if (isAdmin || isBkk(user)) extra.lowongan = (await db.prepare(`SELECT COUNT(*) n FROM lowongan WHERE status='buka'`).first()).n;
@@ -1297,25 +1323,33 @@ export async function onRequest(ctx) {
       const id = parts[2] ? clampInt(parts[2], 0, 0, 1e12) : null;
       const guruOnly = `author_id IN (SELECT id FROM users WHERE role='guru')`;
       if (method === 'GET' && !id) {
-        const st = ['review', 'draft', 'publish', 'ditolak', 'revisi'].includes(q.get('status')) ? q.get('status') : 'review';
-        const cols = `id,slug,title,excerpt,cover,category,status,author_name,author_title,submitted_at,review_note,reviewed_by,reviewed_at,published_at,views,rev_state,rev_at,rev_data`;
+        await autoArchive(db);
+        const st = ['review', 'draft', 'publish', 'ditolak', 'revisi', 'arsip'].includes(q.get('status')) ? q.get('status') : 'review';
+        const cols = `id,slug,title,excerpt,cover,category,status,author_name,author_title,submitted_at,review_note,reviewed_by,reviewed_at,published_at,views,rev_state,rev_at,rev_data,reminded_at,archived_at,archive_reason`;
         const rows = st === 'revisi'
           ? await db.prepare(`SELECT ${cols} FROM posts WHERE ${guruOnly} AND status='publish' AND rev_state='review' ORDER BY rev_at ASC LIMIT 200`).all()
-          : await db.prepare(`SELECT ${cols} FROM posts WHERE ${guruOnly} AND status=? ORDER BY ${st === 'publish' ? 'published_at' : 'COALESCE(submitted_at,updated_at)'} ${st === 'review' ? 'ASC' : 'DESC'} LIMIT 200`).bind(st).all();
+          : await db.prepare(`SELECT ${cols} FROM posts WHERE ${guruOnly} AND status=? ORDER BY ${st === 'publish' ? 'published_at' : st === 'arsip' ? 'archived_at' : st === 'ditolak' ? 'COALESCE(reviewed_at,updated_at)' : 'COALESCE(submitted_at,updated_at)'} ${st === 'review' || st === 'ditolak' ? 'ASC' : 'DESC'} LIMIT 200`).bind(st).all();
         for (const r of rows.results) { // judul/ringkasan revisi untuk tab Revisi
           if (st === 'revisi' && r.rev_data) { try { const v = JSON.parse(r.rev_data); r.rev_title = v.title; r.excerpt = v.excerpt || r.excerpt; } catch { /* abaikan */ } }
           delete r.rev_data;
         }
         const counts = Object.fromEntries((await db.prepare(`SELECT status, COUNT(*) n FROM posts WHERE ${guruOnly} GROUP BY status`).all()).results.map((r) => [r.status, r.n]));
         counts.revisi = (await db.prepare(`SELECT COUNT(*) n FROM posts WHERE ${guruOnly} AND status='publish' AND rev_state='review'`).first()).n;
-        return json({ items: rows.results, counts });
+        const archiveDays = parseInt((await db.prepare(`SELECT value FROM settings WHERE key='review_archive_days'`).first('value')) ?? '30', 10) || 0;
+        return json({ items: rows.results, counts, archiveDays });
       }
       const post = id ? await db.prepare(`SELECT * FROM posts WHERE id=? AND ${guruOnly}`).bind(id).first() : null;
       if (!post) return err('Tulisan tidak ditemukan.', 404);
       if (method === 'GET') return json({ item: post });
+      if (method === 'DELETE') { // hapus permanen hanya untuk tulisan yang sudah diarsipkan
+        if (post.status !== 'arsip') return err('Hanya tulisan di Arsip yang dapat dihapus permanen. Arsipkan terlebih dahulu.');
+        await db.prepare(`DELETE FROM posts WHERE id=?`).bind(id).run();
+        await notify(db, post.author_id, 'hapus', `Tulisan "${post.title}" dihapus dari arsip`, `Tulisan yang diarsipkan telah dihapus oleh ${user.name || user.username}.`, '#/posts');
+        return json({ ok: true });
+      }
       if (method === 'POST') {
         const b = await body();
-        const note = str(b.note, 1000);
+        const note = str(b.note, 1000).replace(/[.\s]+$/, ''); // tanpa titik di akhir agar kalimat notifikasi rapi
         const edits = {};
         if (b.title !== undefined) { edits.title = str(b.title, 200); if (!edits.title) return err('Judul tidak boleh kosong.'); }
         if (b.content !== undefined) { edits.content = cleanHtml(String(b.content || "")); edits.excerpt = textOnly(edits.content).slice(0, 220); }
@@ -1334,7 +1368,23 @@ export async function onRequest(ctx) {
           edits.updated_at = now();
           const k = Object.keys(edits);
           await db.prepare(`UPDATE posts SET ${k.map((x) => x + '=?').join(',')} WHERE id=?`).bind(...k.map((x) => edits[x]), id).run();
+          if (b.action === 'approve') await notify(db, post.author_id, 'publish', `Revisi "${edits.title || post.title}" disetujui`, `Revisi Anda sudah tayang di website.${note ? ' Catatan WMM: ' + note : ''}`, `/berita/${post.slug}`);
+          else await notify(db, post.author_id, 'ditolak', `Revisi "${post.title}" dikembalikan`, `Versi lama tetap tayang. Catatan WMM: ${note}`, `#/posts/${id}`);
           return json({ ok: true, slug: post.slug });
+        }
+        if (b.action === 'remind') {
+          if (post.status !== 'ditolak') return err('Pengingat hanya untuk tulisan yang sedang dikembalikan.');
+          if (post.reminded_at && Date.now() - Date.parse(post.reminded_at) < 864e5) return err('Penulis sudah diingatkan dalam 24 jam terakhir.');
+          await db.prepare(`UPDATE posts SET reminded_at=? WHERE id=?`).bind(now(), id).run();
+          await notify(db, post.author_id, 'pengingat', `Pengingat: tulisan "${post.title}" menunggu revisi Anda`, `Catatan WMM: ${post.review_note || '-'}`, `#/posts/${id}`);
+          return json({ ok: true });
+        }
+        if (b.action === 'archive') {
+          if (post.status === 'publish') return err('Tulisan yang tayang tidak dapat diarsipkan. Tarik dari website terlebih dahulu.');
+          if (!note) return err('Tuliskan alasan pengarsipan untuk penulis.');
+          await db.prepare(`UPDATE posts SET status='arsip', archived_at=?, archive_reason='wmm', review_note=?, reviewed_by=?, reviewed_at=?, updated_at=? WHERE id=?`).bind(now(), note, user.name || user.username, now(), now(), id).run();
+          await notify(db, post.author_id, 'arsip', `Tulisan "${post.title}" diarsipkan WMM`, `Tulisan dinilai belum layak terbit. Catatan: ${note}. Anda tetap dapat memperbaikinya lalu mengirim ulang.`, `#/posts/${id}`);
+          return json({ ok: true });
         }
         if (b.action === 'approve') Object.assign(edits, { status: 'publish', published_at: post.published_at || now(), reviewed_by: who, reviewed_at: now(), review_note: note || null });
         else if (b.action === 'reject') { if (!note) return err('Tuliskan catatan revisi untuk penulis.'); Object.assign(edits, { status: 'ditolak', reviewed_by: who, reviewed_at: now(), review_note: note }); }
@@ -1343,7 +1393,26 @@ export async function onRequest(ctx) {
         edits.updated_at = now();
         const k = Object.keys(edits);
         await db.prepare(`UPDATE posts SET ${k.map((x) => x + '=?').join(',')} WHERE id=?`).bind(...k.map((x) => edits[x]), id).run();
+        const t = edits.title || post.title;
+        if (b.action === 'approve') await notify(db, post.author_id, 'publish', post.status === 'publish' ? `Tulisan "${t}" diperbarui WMM` : `Tulisan "${t}" disetujui & tayang`,
+          post.status === 'publish' ? `WMM memperbaiki tulisan Anda yang sudah tayang.${note ? ' Catatan: ' + note : ''}` : `Selamat! Tulisan Anda kini tayang di website sekolah.${note ? ' Catatan WMM: ' + note : ''}`, `/berita/${post.slug}`);
+        else if (b.action === 'reject') await notify(db, post.author_id, 'ditolak', post.status === 'publish' ? `Tulisan "${t}" ditarik dari website` : `Tulisan "${t}" perlu direvisi`, `Catatan WMM: ${note}`, `#/posts/${id}`);
         return json({ ok: true, slug: post.slug });
+      }
+    }
+
+    // Notifikasi milik pengguna yang login
+    if (area === 'notif') {
+      if (method === 'GET') {
+        const items = (await db.prepare(`SELECT id,kind,title,body,link,created_at,read_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 50`).bind(user.id).all()).results;
+        const unread = (await db.prepare(`SELECT COUNT(*) n FROM notifications WHERE user_id=? AND read_at IS NULL`).bind(user.id).first('n')) || 0;
+        return json({ items, unread });
+      }
+      if (method === 'POST') {
+        const b = await body();
+        if (b.all) await db.prepare(`UPDATE notifications SET read_at=? WHERE user_id=? AND read_at IS NULL`).bind(now(), user.id).run();
+        else if (b.id) await db.prepare(`UPDATE notifications SET read_at=? WHERE user_id=? AND id=?`).bind(now(), user.id, clampInt(b.id, 0, 0, 1e12)).run();
+        return json({ ok: true });
       }
     }
 
