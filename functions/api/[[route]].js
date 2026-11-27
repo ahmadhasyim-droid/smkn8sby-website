@@ -311,7 +311,7 @@ async function sendNotif(env, db, m, test = false) {
 // ---------------- BACKUP & PEMULIHAN ----------------
 // Tabel yang dicadangkan (sesi login, percobaan login, dan cache feed tidak perlu)
 const BACKUP_SKIP = new Set(['sessions', 'login_attempts', 'cache', 'backup_log']);
-const BACKUP_ORDER = ['settings', 'units', 'users', 'posts', 'agenda', 'gallery', 'programs', 'prestasi', 'lowongan', 'skema', 'dudi', 'messages', 'sarpras_meta', 'sarpras_assets', 'sarpras_bast', 'teacher_profiles', 'notifications', 'media'];
+const BACKUP_ORDER = ['settings', 'units', 'users', 'posts', 'agenda', 'gallery', 'programs', 'prestasi', 'lowongan', 'skema', 'dudi', 'messages', 'sarpras_meta', 'sarpras_assets', 'sarpras_bast', 'teacher_profiles', 'notifications', 'facilities', 'media'];
 async function backupTables(db) {
   const rows = (await db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'`).all()).results.map((r) => r.name);
   const ok = rows.filter((n) => !BACKUP_SKIP.has(n) && /^[a-z_]+$/.test(n));
@@ -755,6 +755,13 @@ const RESOURCES = {
       category: 40, image: 300, images: 3000, description: 3000, featured: 'bool', sort: 'int' },
     required: ['title'],
   },
+  // Fasilitas: admin & Waka Sarpras semua data; unit lain (jurusan, TEFA, lembaga) hanya fasilitas miliknya
+  facility: {
+    table: 'facilities', scope: 'unit', order: "CASE WHEN unit_slug='sekolah' THEN 0 ELSE 1 END, unit_slug, sort, category, name",
+    fields: { name: 150, category: 30, unit_slug: 40, location: 150, quantity: 'int', capacity: 'int', area: 'int', condition: 20, description: 2000, features: 1000,
+      image: 300, images: 2000, featured: 'bool', sort: 'int' },
+    required: ['name'],
+  },
   // DUDI: admin & BKK semua data; pengelola jurusan hanya DUDI jurusannya
   dudi: {
     table: 'dudi', scope: 'major', order: 'major, sort, name',
@@ -765,6 +772,9 @@ const RESOURCES = {
 // Waka Humas ikut mengurus hubungan industri: aksesnya setara BKK untuk Lowongan & DUDI
 const BKK_ACCESS = new Set(['bkk', 'waka-humas']);
 const isBkk = (user) => BKK_ACCESS.has(user.unit_slug);
+const FAC_CATS = ['kelas', 'lab', 'tefa', 'studio', 'aula', 'olahraga', 'kreativitas', 'perpustakaan', 'ibadah', 'kesehatan', 'kantin', 'toilet', 'taman', 'kantor', 'parkir', 'lainnya'];
+// pengelola yang boleh mengatur data SEMUA unit untuk sebuah tabel (selain admin)
+const fullScope = (user, res) => user.role === 'admin' || (res.table === 'facilities' && user.unit_slug === 'waka-sarpras');
 const dudiAll = (user) => user.role === 'admin' || isBkk(user);
 const scopeOk = (user, scope) => (scope === 'bkk' ? isBkk(user) : user.unit_slug === scope);
 function canUseResource(user, res) {
@@ -772,6 +782,7 @@ function canUseResource(user, res) {
   if (isGuru(user)) return res.table === 'posts'; // guru hanya menulis artikel
   if (res.table === 'programs') return String(user.unit_slug || '').startsWith('waka-'); // Program Sekolah: khusus Waka
   if (res.table === 'tefa_products') return String(user.unit_slug || '').startsWith('tefa-'); // Katalog: khusus TEFA
+  if (res.table === 'facilities') return fullScope(user, res) || JURUSAN.has(user.unit_slug) || /^tefa-/.test(user.unit_slug || '') || ['lsp', 'bkk'].includes(user.unit_slug); // Fasilitas: Sarpras + unit pemilik ruang
   if (res.scope === 'unit') return !!user.unit_slug;
   if (res.scope === 'major') return dudiAll(user) || JURUSAN.has(user.unit_slug);
   return scopeOk(user, res.scope);
@@ -779,6 +790,7 @@ function canUseResource(user, res) {
 function canTouchRow(user, res, row) {
   if (user.role === 'admin') return true;
   if (isGuru(user)) return res.table === 'posts' && row.author_id === user.id;
+  if (fullScope(user, res)) return true;
   if (res.scope === 'unit') return row.unit_slug === user.unit_slug;
   if (res.scope === 'major') return dudiAll(user) || row.major === user.unit_slug;
   return scopeOk(user, res.scope);
@@ -965,6 +977,15 @@ export async function onRequest(ctx) {
         db.prepare(`SELECT level, COUNT(*) n FROM prestasi GROUP BY level`).all(),
       ]);
       return json({ items: rows.results, perLevel: Object.fromEntries(per.results.map((r) => [r.level, r.n])) }, 200, { 'Cache-Control': 'public, max-age=60' });
+    }
+
+    if (method === 'GET' && parts[0] === 'fasilitas') {
+      const where = ['1=1']; const args = [];
+      if (q.get('unit')) { where.push('unit_slug=?'); args.push(q.get('unit')); }
+      if (q.get('category')) { where.push('category=?'); args.push(q.get('category')); }
+      const rows = await db.prepare(`SELECT id,name,category,unit_slug,location,quantity,capacity,area,condition,description,features,image,images,featured FROM facilities WHERE ${where.join(' AND ')}
+        ORDER BY featured DESC, CASE WHEN unit_slug='sekolah' THEN 0 ELSE 1 END, sort, name LIMIT 500`).bind(...args).all();
+      return json({ items: rows.results }, 200, { 'Cache-Control': 'public, max-age=60' });
     }
 
     if (method === 'GET' && parts[0] === 'dudi') {
@@ -1451,7 +1472,7 @@ export async function onRequest(ctx) {
       if (method === 'GET' && !id) {
         const where = ['1=1'], args = [];
         if (isGuru(user)) { where.push('author_id=?'); args.push(user.id); }
-        else if (!isAdmin && res.scope === 'unit') { where.push('unit_slug=?'); args.push(user.unit_slug); }
+        else if (!fullScope(user, res) && res.scope === 'unit') { where.push('unit_slug=?'); args.push(user.unit_slug); }
         else if (q.get('unit') && res.scope === 'unit') { where.push('unit_slug=?'); args.push(q.get('unit')); }
         if (res.scope === 'major') {
           if (!dudiAll(user)) { where.push('major=?'); args.push(user.unit_slug); }
@@ -1487,7 +1508,7 @@ export async function onRequest(ctx) {
         const b = await body();
         const data = pickFields(res, b);
         if (res.scope === 'unit') {
-          if (!isAdmin) data.unit_slug = user.unit_slug;
+          if (!fullScope(user, res)) data.unit_slug = user.unit_slug;
           else if ('unit_slug' in data && data.unit_slug !== 'sekolah' &&
             !(await db.prepare(`SELECT slug FROM units WHERE slug=?`).bind(data.unit_slug).first())) data.unit_slug = 'sekolah';
         }
@@ -1498,6 +1519,12 @@ export async function onRequest(ctx) {
         if (method === 'POST') for (const r of res.required) if (!data[r]) return err(`Kolom "${r}" wajib diisi.`);
         if (method === 'PUT') for (const r of res.required) if (r in data && !data[r]) return err(`Kolom "${r}" wajib diisi.`);
 
+        if (area === 'facility') {
+          if (data.category && !FAC_CATS.includes(data.category)) data.category = 'lainnya';
+          if (data.condition && !['baik', 'cukup', 'perbaikan'].includes(data.condition)) data.condition = 'baik';
+          if ('images' in data) data.images = String(data.images).split(/\n+/).map((x) => x.trim()).filter((x) => /^\/api\/media\/[a-f0-9]{24}$/.test(x)).slice(0, 8).join('\n');
+          if (method === 'POST' && !data.unit_slug) data.unit_slug = 'sekolah';
+        }
         if (area === 'product') {
           if (data.badge && !['terlaris', 'baru', 'preorder', 'promo'].includes(data.badge)) data.badge = '';
           if (data.price !== undefined && (data.price === null || data.price < 0)) data.price = null;

@@ -333,3 +333,12 @@ td.act .btn + .btn { margin-left: 4px; }
 .ni-tx b { font-size: .92rem; line-height: 1.35; }
 .ni-tx span { font-size: .85rem; color: #4a5565; line-height: 1.45; }
 .ni-tx small { font-size: .74rem; color: var(--muted); }
+/* banyak foto */
+.imgs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.imgs-it { position: relative; aspect-ratio: 4/3; border-radius: 8px; background: #eef1f5 center/cover; border: 1px solid var(--line); display: grid; place-items: center; font-size: .75rem; color: var(--muted); }
+.imgs-it button { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: rgba(13, 26, 46, .75); color: #fff; font-size: 1.1rem; line-height: 1; cursor: pointer; }
+.imgs-it button:hover { background: var(--bad); }
+.imgs-add { aspect-ratio: 4/3; border: 2px dashed var(--line); border-radius: 8px; background: #fafbfc; color: var(--muted); display: grid; place-items: center; align-content: center; gap: 4px; font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
+.imgs-add:hover { border-color: var(--blue); color: var(--blue); }
+.imgs-add[hidden] { display: none; }
+.imgs-add .ico { width: 20px; height: 20px; }

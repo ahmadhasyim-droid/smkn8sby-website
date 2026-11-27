@@ -1002,3 +1002,59 @@ select.chip-btn { appearance: auto; padding-right: 10px; }
 .layanan-card .go { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--c); color: #fff; }
 .layanan-card .go .ico { width: 20px; height: 20px; }
 @media (max-width: 640px) { .layanan-card { grid-template-columns: 64px 1fr; padding: 18px; gap: 14px; } .layanan-card .lg { width: 64px; height: 64px; } .layanan-card .go { display: none; } .layanan-card h3 { font-size: 1.15rem; } }
+
+/* ===== Fasilitas ===== */
+.fac-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 28px; }
+.fac-sum:empty { display: none; }
+.fac-sum div { background: var(--ink); color: #fff; border-radius: var(--radius); padding: 18px 20px; border-left: 5px solid var(--orange); }
+.fac-sum b { display: block; font-family: var(--display); font-weight: 900; font-stretch: 80%; font-size: 2.3rem; line-height: 1; color: #ffb48f; }
+.fac-sum span { font-size: .86rem; color: #c9d4e3; }
+.fac-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 20px; }
+.fac-grid.sm { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+.fac-card { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; transition: .2s; border-bottom: 4px solid var(--c); }
+.fac-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.fac-card:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+.fc-img { position: relative; aspect-ratio: 16/10; background: color-mix(in srgb, var(--c) 10%, #f3f4f6); display: block; }
+.fc-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fc-ph { position: absolute; inset: 0; display: grid; place-items: center; color: color-mix(in srgb, var(--c) 70%, #fff); }
+.fc-ph .ico { width: 56px; height: 56px; }
+.fc-cat { position: absolute; left: 12px; top: 12px; background: rgba(13, 26, 46, .82); color: #fff; font-size: .7rem; font-weight: 700; padding: 4px 10px; border-radius: 99px; }
+.fc-more { position: absolute; right: 12px; bottom: 12px; display: inline-flex; gap: 5px; align-items: center; background: rgba(255, 255, 255, .92); color: var(--ink); font-size: .74rem; font-weight: 700; padding: 3px 9px; border-radius: 99px; }
+.fc-more .ico { width: 14px; height: 14px; }
+.fc-body { display: grid; gap: 6px; padding: 16px 18px 18px; }
+.fc-body b { font-size: 1.04rem; line-height: 1.3; color: var(--ink); }
+.fc-body small { color: var(--muted); font-size: .84rem; }
+.fc-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.fc-facts i { font-style: normal; display: inline-flex; gap: 5px; align-items: center; font-size: .76rem; font-weight: 600; background: var(--paper); padding: 3px 9px; border-radius: 99px; color: #344155; }
+.fc-facts .ico { width: 13px; height: 13px; }
+.fc-own { display: flex; gap: 7px; align-items: center; font-size: .78rem; color: var(--muted); font-weight: 600; margin-top: 4px; }
+.fc-own .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+.fac-modal { position: fixed; inset: 0; z-index: 300; background: rgba(13, 26, 46, .7); display: grid; place-items: center; padding: 20px; animation: pgdIn .15s ease-out; }
+.fm-box { position: relative; width: min(1040px, 100%); max-height: calc(100vh - 40px); overflow: auto; background: #fff; border-radius: 14px; display: grid; grid-template-columns: 1.25fr 1fr; border-top: 5px solid var(--c); }
+.fm-x { position: absolute; top: 12px; right: 12px; z-index: 2; width: 38px; height: 38px; border-radius: 50%; border: 0; background: rgba(13, 26, 46, .75); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.fm-x .ico { width: 18px; height: 18px; }
+.fm-media { background: #0d1a2e; display: grid; grid-template-rows: 1fr auto; min-height: 320px; }
+.fm-main { width: 100%; height: 100%; max-height: 70vh; object-fit: contain; display: block; }
+.fm-thumbs { display: flex; gap: 6px; padding: 8px; overflow-x: auto; background: #0a1424; }
+.fm-thumbs button { flex: none; width: 70px; height: 52px; padding: 0; border: 2px solid transparent; border-radius: 6px; overflow: hidden; cursor: pointer; background: none; opacity: .65; }
+.fm-thumbs button.on { border-color: #fff; opacity: 1; }
+.fm-thumbs img { width: 100%; height: 100%; object-fit: cover; }
+.fm-ph { display: grid; place-items: center; align-content: center; gap: 8px; color: #8fa3bf; }
+.fm-ph .ico { width: 64px; height: 64px; }
+.fm-info { padding: 28px 28px 24px; display: grid; gap: 12px; align-content: start; }
+.fm-cat { color: var(--c); font-size: .72rem; }
+.fm-info h2 { font-size: 1.7rem; font-weight: 900; font-stretch: 84%; text-transform: uppercase; line-height: 1.05; margin: 0; padding-right: 30px; }
+.fm-loc { display: flex; gap: 6px; align-items: center; color: var(--muted); margin: 0; font-size: .92rem; }
+.fm-loc .ico { width: 16px; height: 16px; }
+.fm-facts { display: flex; flex-wrap: wrap; gap: 8px; }
+.fm-facts span { display: inline-flex; gap: 6px; align-items: center; background: var(--paper); border-radius: 99px; padding: 5px 12px; font-size: .84rem; font-weight: 600; }
+.fm-facts .ico { width: 15px; height: 15px; }
+.fm-facts .cond.c-baik { background: #e3f6ec; color: #11744f; } .fm-facts .cond.c-cukup { background: #fff3dc; color: #8a5a00; } .fm-facts .cond.c-perbaikan { background: #fde8eb; color: #a3243a; }
+.fm-desc { margin: 0; color: #344155; line-height: 1.65; font-size: .95rem; }
+.fm-info h4 { margin: 6px 0 0; font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.fm-feat { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+.fm-feat li { display: flex; gap: 7px; align-items: flex-start; font-size: .9rem; }
+.fm-feat .ico { width: 16px; height: 16px; color: #16966a; flex: none; margin-top: 2px; }
+.fm-own { margin: 6px 0 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: .86rem; color: var(--muted); }
+.fm-own a { color: var(--blue); font-weight: 700; }
+@media (max-width: 820px) { .fm-box { grid-template-columns: 1fr; } .fm-media { min-height: 220px; } .fm-main { max-height: 46vh; } .fm-feat { grid-template-columns: 1fr; } .fm-info { padding: 20px; } }

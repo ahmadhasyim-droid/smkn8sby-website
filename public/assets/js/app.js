@@ -51,6 +51,12 @@ const ICONS = {
   handshake: '<path d="M11 17l2 2a1.4 1.4 0 0 0 2-2"/><path d="M14 14l2.5 2.5a1.4 1.4 0 0 0 2-2L15 11l-1.5 1.5a2 2 0 0 1-3-3L13 7l-1-1-4 4"/><path d="M2 11l4-4 3 1M22 11l-4-4h-3"/><path d="M6 13l3 3"/>',
   trophy: '<path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
   play: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>',
+  check: '<path d="M5 12l5 5L20 7"/>',
+  heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/><path d="M12 10v4M10 12h4"/>',
+  sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>',
+  building: '<path d="M4 21V5l8-3 8 3v16M4 21h16M9 21v-4h6v4M8 8h2M14 8h2M8 12h2M14 12h2"/>',
+  users2: '<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 4a3 3 0 0 1 0 6M18 20a6 6 0 0 0-3-5"/>',
+  ruler: '<path d="M3 17 17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   idcard: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.5"/><path d="M5.5 16.5a3.5 3.5 0 0 1 7 0M15 10h4M15 14h3"/>',
   printer: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
@@ -221,11 +227,12 @@ function renderShell() {
     <nav class="nav" id="nav" aria-label="Menu utama">
       <button class="nav-toggle nav-close" aria-label="Tutup menu">${icon('x')}</button>
       <a href="/"${act('home')}>Beranda</a>
-      <div class="dd"><button aria-haspopup="true"${['profil', 'perpustakaan', 'program', 'guru'].includes(page) ? ' class="active"' : ''}>Profil ${icon('chev')}</button><div class="dd-panel">
+      <div class="dd"><button aria-haspopup="true"${['profil', 'perpustakaan', 'program', 'guru', 'fasilitas'].includes(page) ? ' class="active"' : ''}>Profil ${icon('chev')}</button><div class="dd-panel">
         ${ddLink('/profil', 'Profil Sekolah', 'Sambutan, sejarah, visi & misi', 'sekolah', '#235ba4')}
         ${s.profile_video ? ddLink('/profil#video', 'Video Profil', 'Kenali SMKN 8 Surabaya lewat video', 'play', '#f26836') : ''}
         ${ddLink('/program', 'Program Sekolah', 'Program kerja wakil kepala sekolah', 'clipboard', '#1d4ed8')}
         ${s.guru_profiles !== '0' ? ddLink('/guru', 'Profil Guru', 'Kenali guru, keahlian & sertifikasinya', 'idcard', '#0f766e') : ''}
+        ${ddLink('/fasilitas', 'Fasilitas', 'Ruang kelas, lab praktik, TEFA, aula & lainnya', 'building', '#c2410c')}
         ${ddLink('/perpustakaan', 'Perpustakaan', 'Profil & layanan perpustakaan', 'book', '#16966a')}
         ${ddLink('/dudi', 'DUDI / Mitra Industri', 'Industri yang bekerja sama', 'handshake', '#7c4bc4')}
       </div></div>
@@ -687,7 +694,7 @@ PAGES.unit = async (main) => {
   const parent = isTefa ? UNITS[unit.parent] : null;
   const myTefa = isJur ? Object.values(UNITS).find((u) => u.type === 'tefa' && u.parent === slug) : null;
   const tabs = [['profil', 'Profil'], [isLSP ? 'skema' : isBKK ? 'lowongan' : isTefa ? 'layanan' : isWaka ? 'program' : 'kompetensi', isLSP ? 'Skema Sertifikasi' : isBKK ? 'Lowongan Kerja' : isTefa ? 'Produk & Pemesanan' : isWaka ? 'Program Kerja' : 'Kompetensi'],
-    ...(isJur ? [['dudi', 'Mitra DUDI'], ['prestasi', 'Prestasi']] : []), ['kegiatan', 'Kegiatan'], ['agenda', 'Agenda'], ['galeri', 'Galeri']];
+    ...(isJur ? [['dudi', 'Mitra DUDI'], ['prestasi', 'Prestasi']] : []), ...(!isWaka ? [['fasilitas', 'Fasilitas']] : []), ['kegiatan', 'Kegiatan'], ['agenda', 'Agenda'], ['galeri', 'Galeri']];
   const others = Object.values(UNITS).filter((u) => u.slug !== slug);
   const komp = lines(unit.kompetensi), prospek = lines(unit.prospek);
 
@@ -731,6 +738,7 @@ PAGES.unit = async (main) => {
       <div class="unit-block" id="dudi"><h2>Mitra Industri (DUDI)</h2><p class="prose" style="margin-top:-6px;color:var(--muted)">Dunia usaha & dunia industri tempat siswa ${esc(unit.name)} praktik kerja lapangan dan magang.</p>
         <div class="dudi-grid compact" id="unitDudi"></div><p style="margin-top:16px"><a class="link-arrow" href="/dudi?jurusan=${esc(slug)}">Lihat semua DUDI ${esc(unit.short || '')} ${icon('arrow')}</a></p></div>` : ''}
       ${isJur ? `<div class="unit-block" id="prestasi"><h2>Prestasi Siswa</h2><div class="pres-grid two" id="unitPres"></div><p style="margin-top:16px"><a class="link-arrow" href="/prestasi?jurusan=${esc(slug)}">Semua prestasi ${esc(unit.short || '')} ${icon('arrow')}</a></p></div>` : ''}
+      ${!isWaka ? `<div class="unit-block" id="fasilitas"><h2>Fasilitas</h2><div class="fac-grid sm" id="unitFac"><div class="skel" style="height:200px"></div></div></div>` : ''}
       <div class="unit-block" id="kegiatan"><h2>Kegiatan & Berita</h2><div class="news-grid two" id="unitNews"></div>
         <p style="margin-top:20px"><a class="link-arrow" href="/berita?unit=${esc(slug)}">Semua berita ${esc(unit.short || unit.name)} ${icon('arrow')}</a></p></div>
       <div class="unit-block" id="agenda"><h2>Agenda</h2><div class="agenda-list" id="unitAgenda"></div></div>
@@ -762,6 +770,10 @@ PAGES.unit = async (main) => {
   const [news, agenda, gal] = await Promise.all([api(`posts?unit=${slug}&limit=4`), api(`agenda?unit=${slug}&limit=8`), api(`gallery?unit=${slug}&limit=12`)]);
   $('#unitNews').innerHTML = news.items.length ? news.items.map((p) => postCard(p)).join('') : `<div style="grid-column:1/-1">${empty('Belum ada kegiatan yang dipublikasikan.')}</div>`;
   $('#unitAgenda').innerHTML = agenda.items.length ? agenda.items.map((a) => agendaItem(a, (a.end_date || a.date) < agenda.today)).join('') : empty('Belum ada agenda.');
+  if ($('#unitFac')) api('fasilitas?unit=' + slug).then((d) => {
+    if (!d.items.length) { $('#fasilitas')?.remove(); $$(`a[href="#fasilitas"]`).forEach((a) => a.remove()); return; }
+    $('#unitFac').innerHTML = d.items.map(facCard).join(''); bindFacCards($('#unitFac'), d.items);
+  }).catch(() => $('#fasilitas')?.remove());
   $('#unitGal').innerHTML = gal.items.length ? gal.items.map((g) => `<figure data-lightbox="${esc(g.image)}" data-caption="${esc(g.caption || '')}"><img src="${esc(g.image)}" alt="${esc(g.caption || '')}" loading="lazy">${g.caption ? `<figcaption>${esc(g.caption)}</figcaption>` : ''}</figure>`).join('') : empty('Belum ada foto.');
 
   if (isBKK) {
@@ -1292,6 +1304,76 @@ async function guruProfile(main, slug) {
   </div></section>`;
   $('#printCv').onclick = () => window.print();
 }
+
+// ---------- Fasilitas ----------
+const FAC_LABEL = { kelas: 'Ruang kelas', lab: 'Laboratorium & bengkel praktik', tefa: 'Ruang TEFA', studio: 'Studio', aula: 'Aula & ruang pertemuan', olahraga: 'Sarana olahraga',
+  kreativitas: 'Ruang kreativitas siswa', perpustakaan: 'Perpustakaan', ibadah: 'Tempat ibadah', kesehatan: 'UKS & kesehatan', kantin: 'Kantin', toilet: 'Toilet', taman: 'Taman & ruang terbuka',
+  kantor: 'Kantor & ruang layanan', parkir: 'Area parkir', lainnya: 'Lainnya' };
+const FAC_ICON = { kelas: 'sekolah', lab: 'kurikulum', tefa: 'factory', studio: 'image', aula: 'users2', olahraga: 'trophy', kreativitas: 'sparkle', perpustakaan: 'book', ibadah: 'building',
+  kesehatan: 'heart', kantin: 'kuliner', toilet: 'building', taman: 'globe', kantor: 'building', parkir: 'building', lainnya: 'building' };
+const facIcon = (c) => icon(ICONS[FAC_ICON[c]] ? FAC_ICON[c] : 'building');
+const facOwner = (f) => (f.unit_slug && f.unit_slug !== 'sekolah' && UNITS[f.unit_slug] ? UNITS[f.unit_slug] : null);
+const facFacts = (f) => [f.quantity ? `${icon('building')}${f.quantity} ruang` : '', f.capacity ? `${icon('users2')}${f.capacity} orang` : '', f.area ? `${icon('ruler')}${f.area} m²` : ''].filter(Boolean);
+const facCard = (f) => { const o = facOwner(f);
+  return `<button type="button" class="fac-card" data-fac="${f.id}" style="--c:${o?.color || '#c2410c'}">
+    <span class="fc-img">${f.image ? `<img src="${esc(f.image)}" alt="${esc(f.name)}" loading="lazy">` : `<span class="fc-ph">${facIcon(f.category)}</span>`}
+      <span class="fc-cat">${esc(FAC_LABEL[f.category] || 'Fasilitas')}</span>${(f.images || '').trim() ? `<span class="fc-more">${icon('image')}${String(f.images).split('\n').filter(Boolean).length + (f.image ? 1 : 0)}</span>` : ''}</span>
+    <span class="fc-body"><b>${esc(f.name)}</b>${f.location ? `<small>${esc(f.location)}</small>` : ''}
+      ${facFacts(f).length ? `<span class="fc-facts">${facFacts(f).map((x) => `<i>${x}</i>`).join('')}</span>` : ''}
+      <span class="fc-own">${o ? `<span class="dot" style="--c:${o.color}"></span>${esc(o.name)}` : `<span class="dot" style="--c:#64748b"></span>Fasilitas sekolah`}</span></span></button>`; };
+function facModal(f) {
+  const o = facOwner(f), pics = [f.image, ...String(f.images || '').split('\n')].map((x) => (x || '').trim()).filter(Boolean);
+  const feats = lines(f.features);
+  const m = document.createElement('div'); m.className = 'fac-modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', f.name);
+  m.innerHTML = `<div class="fm-box" style="--c:${o?.color || '#c2410c'}"><button class="fm-x" aria-label="Tutup">${icon('x')}</button>
+    <div class="fm-media">${pics.length ? `<img class="fm-main" src="${esc(pics[0])}" alt="${esc(f.name)}">${pics.length > 1 ? `<div class="fm-thumbs">${pics.map((u, i) => `<button type="button" class="${i ? '' : 'on'}" data-src="${esc(u)}"><img src="${esc(u)}" alt="Foto ${i + 1}" loading="lazy"></button>`).join('')}</div>` : ''}` : `<div class="fm-ph">${facIcon(f.category)}<span>Belum ada foto</span></div>`}</div>
+    <div class="fm-info"><span class="mono fm-cat">${esc(FAC_LABEL[f.category] || 'Fasilitas')}</span><h2>${esc(f.name)}</h2>
+      ${f.location ? `<p class="fm-loc">${icon('pin')}${esc(f.location)}</p>` : ''}
+      ${facFacts(f).length || f.condition ? `<div class="fm-facts">${facFacts(f).map((x) => `<span>${x}</span>`).join('')}${f.condition ? `<span class="cond c-${esc(f.condition)}">Kondisi: ${esc({ baik: 'Baik', cukup: 'Cukup', perbaikan: 'Dalam perbaikan' }[f.condition] || f.condition)}</span>` : ''}</div>` : ''}
+      ${f.description ? `<p class="fm-desc">${esc(f.description).replace(/\n+/g, '<br>')}</p>` : ''}
+      ${feats.length ? `<h4>Perlengkapan</h4><ul class="fm-feat">${feats.map((x) => `<li>${icon('check')}${esc(x)}</li>`).join('')}</ul>` : ''}
+      <p class="fm-own">Dikelola oleh ${o ? `<a href="${unitUrl(o)}">${esc(o.name)}</a>` : 'Sekolah (Sarana & Prasarana)'}</p></div></div>`;
+  document.body.appendChild(m); document.body.style.overflow = 'hidden';
+  const close = () => { m.remove(); document.body.style.overflow = ''; document.removeEventListener('keydown', esc_); };
+  const esc_ = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', esc_);
+  m.addEventListener('click', (e) => {
+    if (e.target === m || e.target.closest('.fm-x')) return close();
+    const t = e.target.closest('[data-src]'); if (t) { $('.fm-main', m).src = t.dataset.src; $$('.fm-thumbs button', m).forEach((b) => b.classList.toggle('on', b === t)); }
+  });
+  $('.fm-x', m).focus();
+}
+const bindFacCards = (root, items) => root.addEventListener('click', (e) => { const b = e.target.closest('[data-fac]'); if (b) { const f = items.find((x) => String(x.id) === b.dataset.fac); if (f) facModal(f); } });
+PAGES.fasilitas = async (main) => {
+  setTitle('Fasilitas');
+  let cat = params.get('jenis') || '', unit = params.get('unit') || '';
+  main.innerHTML = `${pageHero('Fasilitas', 'Ruang kelas, laboratorium & bengkel praktik setiap program keahlian, ruang TEFA, studio, aula, sarana olahraga, dan fasilitas pendukung lainnya di SMK Negeri 8 Surabaya.', ['Profil', 'Fasilitas'])}
+  <section class="section" style="padding-top:44px"><div class="wrap">
+    <div class="fac-sum" id="facSum"></div>
+    <div class="filters" id="fCat"></div>
+    <div class="filters" style="margin-top:-10px"><select class="chip-btn unit-select" id="fUnit" aria-label="Pengelola"></select><span class="mono" id="facCount" style="color:var(--muted)"></span></div>
+    <div class="fac-grid" id="facList"><div class="skel" style="height:300px"></div></div>
+  </div></section>`;
+  const { items } = await api('fasilitas');
+  const cats = Object.keys(FAC_LABEL).filter((k) => items.some((f) => f.category === k));
+  const owners = [...new Set(items.map((f) => f.unit_slug || 'sekolah'))];
+  const sum = (k) => items.filter((f) => f.category === k).reduce((a, f) => a + (f.quantity || 1), 0);
+  const big = ['kelas', 'lab', 'tefa', 'studio'].filter((k) => sum(k));
+  $('#facSum').innerHTML = big.length ? big.map((k) => `<div><b>${sum(k)}</b><span>${esc(FAC_LABEL[k])}</span></div>`).join('') : '';
+  $('#fCat').innerHTML = [['', `Semua fasilitas`], ...cats.map((k) => [k, FAC_LABEL[k]])].map(([v, l]) => `<button class="chip-btn${v === cat ? ' on' : ''}" data-v="${v}">${esc(l)} <small>${v ? items.filter((f) => f.category === v).length : items.length}</small></button>`).join('');
+  $('#fUnit').innerHTML = `<option value="">Semua pengelola</option>${owners.includes('sekolah') ? `<option value="sekolah"${unit === 'sekolah' ? ' selected' : ''}>Fasilitas umum sekolah</option>` : ''}${owners.filter((x) => x !== 'sekolah' && UNITS[x]).map((x) => `<option value="${x}"${x === unit ? ' selected' : ''}>${esc(UNITS[x].name)}</option>`).join('')}`;
+  const draw = () => {
+    const list = items.filter((f) => (!cat || f.category === cat) && (!unit || (f.unit_slug || 'sekolah') === unit));
+    $('#facCount').textContent = `${list.length} fasilitas`;
+    $('#facList').innerHTML = list.length ? list.map(facCard).join('') : `<div style="grid-column:1/-1">${empty(items.length ? 'Tidak ada fasilitas untuk pilihan ini.' : 'Data fasilitas sedang dilengkapi oleh Sarana & Prasarana serta program keahlian.')}</div>`;
+    const p = new URLSearchParams(); if (cat) p.set('jenis', cat); if (unit) p.set('unit', unit);
+    history.replaceState(null, '', '/fasilitas' + (p.toString() ? '?' + p : ''));
+  };
+  $('#fCat').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; cat = b.dataset.v; $$('#fCat button').forEach((x) => x.classList.toggle('on', x === b)); draw(); };
+  $('#fUnit').onchange = (e) => { unit = e.target.value; draw(); };
+  bindFacCards($('#facList'), items);
+  draw();
+};
 
 // ---------- Perpustakaan ----------
 PAGES.perpustakaan = async (main) => {

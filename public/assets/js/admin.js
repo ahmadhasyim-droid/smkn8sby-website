@@ -39,6 +39,7 @@ const P = {
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  building: '<path d="M4 21V5l8-3 8 3v16M4 21h16M9 21v-4h6v4M8 8h2M14 8h2M8 12h2M14 12h2"/>',
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
   archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
@@ -67,6 +68,9 @@ const isGuru = () => ME.role === 'guru'; // guru penulis: opini, tips & tutorial
 const canReview = () => isAdmin() || ME.unit_slug === 'waka-wmm'; // persetujuan tulisan guru
 const unitName = (slug) => (slug === 'sekolah' ? 'Sekolah (umum)' : UNIT[slug]?.name || slug);
 const unitTag = (slug) => `<span class="tag" style="--c:${slug === 'sekolah' ? '#235ba4' : UNIT[slug]?.color || '#888'}">${esc(slug === 'sekolah' ? 'Sekolah' : UNIT[slug]?.short || slug)}</span>`;
+const FAC_LABEL = { kelas: 'Ruang kelas', lab: 'Laboratorium / bengkel praktik', tefa: 'Ruang TEFA', studio: 'Studio', aula: 'Aula / ruang pertemuan', olahraga: 'Sarana olahraga',
+  kreativitas: 'Ruang kreativitas siswa', perpustakaan: 'Perpustakaan', ibadah: 'Tempat ibadah', kesehatan: 'UKS / kesehatan', kantin: 'Kantin', toilet: 'Toilet', taman: 'Taman / ruang terbuka',
+  kantor: 'Kantor / ruang layanan', parkir: 'Area parkir', lainnya: 'Lainnya' };
 const unitOptions = () => [{ v: 'sekolah', l: 'Sekolah (umum)' }, ...UNITS.map((u) => ({ v: u.slug, l: u.name }))];
 const TYPE_LABEL = { jurusan: 'Program Keahlian', lembaga: 'Lembaga', tefa: 'Teaching Factory', waka: 'Wakil Kepala Sekolah' };
 const unitUrl = (u) => (u.type === 'lembaga' ? `/lembaga/${u.slug}` : u.type === 'waka' ? `/waka/${u.slug.replace(/^waka-/, '')}` : u.type === 'tefa' ? `/tefa/${u.slug.replace(/^tefa-/, '')}` : `/jurusan/${u.slug}`);
@@ -111,6 +115,9 @@ function fieldHtml(f, val) {
     case 'check': return `<div class="field${f.half ? ' half' : ''}"><label class="inline"><input type="checkbox" ${name}${v ? ' checked' : ''}> ${esc(f.label)}</label>${f.help ? `<small>${esc(f.help)}</small>` : ''}</div>`;
     case 'checks': { const set = new Set(String(v).split(',').filter(Boolean)); return `<div class="field" data-k="${f.k}"><span>${esc(f.label)}</span><div class="checks">${f.opts().map((o) => `<label><input type="checkbox" data-checks="${f.k}" value="${esc(o.v)}"${set.has(o.v) ? ' checked' : ''}><span>${esc(o.l)}</span></label>`).join('')}</div>${f.help ? `<small>${esc(f.help)}</small>` : ''}</div>`; }
     case 'color': return wrap(`<div class="color-row"><input type="color" value="${esc(v || '#235ba4')}" oninput="this.nextElementSibling.value=this.value"><input type="text" ${name} value="${esc(v)}" pattern="#[0-9a-fA-F]{6}" oninput="if(/^#[0-9a-f]{6}$/i.test(this.value))this.previousElementSibling.value=this.value"></div>`);
+    case 'images': { const list = String(v || '').split(/\n+/).filter(Boolean);
+      return `<div class="field"><span>${esc(f.label)}</span><div class="imgs-field" data-imgs="${f.k}"><input type="hidden" ${name} value="${esc(list.join('\n'))}"><input type="file" accept="image/*" multiple hidden>
+        <div class="imgs-grid">${list.map((u) => `<span class="imgs-it" style="background-image:url('${esc(u)}')" data-u="${esc(u)}"><button type="button" title="Hapus foto" aria-label="Hapus foto">×</button></span>`).join('')}<button type="button" class="imgs-add" data-imgs-add>${ic('plus')}<span>Tambah foto</span></button></div></div></div>`; }
     case 'image': case 'logo': return `<div class="field${f.half ? ' half' : ''}"><span>${esc(f.label)}</span><div class="img-field${f.type === 'logo' ? ' logo' : ''}" data-img="${f.k}">
       <div class="preview" style="${v ? `background-image:url('${esc(v)}')` : ''}">${v ? '' : 'Belum ada gambar'}</div>
       <input type="hidden" ${name} value="${esc(v)}"><input type="file" accept="image/*">
@@ -144,6 +151,23 @@ function bindForm(root, fields) {
       try { const url = await uploadImage(file.files[0], f.maxW || (f.type === 'logo' ? 600 : 1600), f.tag); hid.value = url; pv.style.backgroundImage = `url('${url}')`; pv.textContent = ''; clr.hidden = false; }
       catch (e) { pv.textContent = ''; toast(e.message, true); }
       file.value = '';
+    };
+  });
+  // banyak foto (galeri kecil)
+  $$('[data-imgs]', root).forEach((box) => {
+    const hid = $('input[type=hidden]', box), file = $('input[type=file]', box), grid = $('.imgs-grid', box), add = $('[data-imgs-add]', box), MAX = 8;
+    const sync = () => { const list = $$('.imgs-it', grid).map((x) => x.dataset.u); hid.value = list.join('\n'); add.hidden = list.length >= MAX; };
+    const bindIt = (it) => { $('button', it).onclick = () => { it.remove(); sync(); }; };
+    $$('.imgs-it', grid).forEach(bindIt); sync();
+    add.onclick = () => file.click();
+    file.onchange = async () => {
+      const files = [...file.files].slice(0, MAX - $$('.imgs-it', grid).length); file.value = '';
+      for (const fl of files) {
+        const ph = document.createElement('span'); ph.className = 'imgs-it loading'; ph.textContent = 'Mengunggah…'; grid.insertBefore(ph, add);
+        try { const u = await uploadImage(fl, 1600); ph.className = 'imgs-it'; ph.textContent = ''; ph.dataset.u = u; ph.style.backgroundImage = `url('${u}')`; ph.innerHTML = '<button type="button" title="Hapus foto" aria-label="Hapus foto">×</button>'; bindIt(ph); }
+        catch (e) { ph.remove(); toast(e.message, true); }
+        sync();
+      }
     };
   });
   // editor teks
@@ -227,7 +251,7 @@ function bindImageTools(ed, area) {
 let docImportP = null;
 const loadDocImport = () => (docImportP ||= new Promise((ok, no) => {
   if (window.DocImport) return ok(window.DocImport);
-  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=32';
+  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=33';
   sc.onload = () => ok(window.DocImport); sc.onerror = () => { docImportP = null; no(new Error('Gagal memuat fitur impor. Periksa koneksi lalu coba lagi.')); };
   document.head.appendChild(sc);
 }));
@@ -453,6 +477,35 @@ const RES = {
     ],
     view: () => '/prestasi',
   },
+  facility: {
+    title: 'Fasilitas', single: 'fasilitas', icon: 'building',
+    cols: [
+      ['', (r) => (r.image ? `<img class="thumb" src="${esc(r.image)}" alt="">` : `<span class="thumb" style="display:block"></span>`)],
+      ['Fasilitas', (r) => `<span class="t-title">${esc(r.name)}</span><span class="t-sub">${esc(FAC_LABEL[r.category] || 'Lainnya')}${r.location ? ' · ' + esc(r.location) : ''}</span>`],
+      ['Jumlah / kapasitas', (r) => [r.quantity ? `${r.quantity} ruang` : '', r.capacity ? `${r.capacity} orang` : '', r.area ? `${r.area} m²` : ''].filter(Boolean).join('<br>') || '-'],
+      ['Kondisi', (r) => (r.condition ? `<span class="tag ${{ baik: 'ok', cukup: 'wait', perbaikan: 'bad' }[r.condition]}">${esc({ baik: 'Baik', cukup: 'Cukup', perbaikan: 'Perlu perbaikan' }[r.condition])}</span>` : '-')],
+      ['Pengelola', (r) => (r.unit_slug === 'sekolah' ? '<span class="tag" style="--c:#5a6474">Sekolah / Sarpras</span>' : unitTag(r.unit_slug))],
+    ],
+    main: () => [
+      { k: 'name', label: 'Nama fasilitas / ruang', required: true, placeholder: 'mis. Laboratorium Pastry & Bakery, Aula Utama, Ruang Kelas Gedung B' },
+      { k: 'category', label: 'Jenis fasilitas', type: 'select', half: true, opts: () => Object.entries(FAC_LABEL).map(([v, l]) => ({ v, l })), default: 'kelas' },
+      ...(isAdmin() || ME.unit_slug === 'waka-sarpras' ? [{ k: 'unit_slug', label: 'Pengelola / pemilik ruang', type: 'select', half: true, default: 'sekolah',
+        opts: () => [{ v: 'sekolah', l: 'Sekolah (umum, dikelola Sarpras)' }, ...UNITS.filter((u) => u.type !== 'waka').map((u) => ({ v: u.slug, l: u.name }))],
+        help: 'Ruang milik program keahlian/TEFA/lembaga bisa diedit juga oleh pengelolanya masing-masing.' }] : []),
+      { k: 'location', label: 'Lokasi', half: true, placeholder: 'mis. Gedung B lantai 2' },
+      { k: 'condition', label: 'Kondisi', type: 'select', half: true, default: 'baik', opts: () => [{ v: 'baik', l: 'Baik' }, { v: 'cukup', l: 'Cukup' }, { v: 'perbaikan', l: 'Perlu perbaikan' }] },
+      { k: 'quantity', label: 'Jumlah ruang / unit', type: 'number', half: true, help: 'mis. 36 ruang kelas, 8 toilet' },
+      { k: 'capacity', label: 'Kapasitas (orang per ruang)', type: 'number', half: true },
+      { k: 'area', label: 'Luas (m², opsional)', type: 'number', half: true },
+      { k: 'sort', label: 'Urutan tampil', type: 'number', half: true, default: 0 },
+      { k: 'description', label: 'Deskripsi', type: 'textarea', rows: 3, placeholder: 'Fungsi ruang, kegiatan yang dilakukan, keunggulan…' },
+      { k: 'features', label: 'Perlengkapan / fasilitas pendukung (satu baris satu item)', type: 'textarea', rows: 4, placeholder: 'AC\nProyektor & layar\nOven deck 3 tingkat\nWi-Fi' },
+      ...(isAdmin() || ME.unit_slug === 'waka-sarpras' ? [{ k: 'featured', label: 'Unggulkan (tampil paling atas)', type: 'check' }] : []),
+      { k: 'image', label: 'Foto utama', type: 'image' },
+      { k: 'images', label: 'Foto lainnya (maks. 8)', type: 'images' },
+    ],
+    view: () => '/fasilitas',
+  },
   dudi: {
     title: 'DUDI / Mitra Industri', single: 'DUDI', icon: 'handshake',
     cols: [
@@ -497,6 +550,8 @@ function menu() {
   if (isAdmin() || UNIT[u]?.type === 'waka') items.splice(1, 0, ['program', 'Program Sekolah', 'clip']);
   if (canReview()) items.splice(1, 0, ['review', 'Persetujuan Tulisan', 'check']);
   const groups = [['Konten', items]];
+  const facOk = isAdmin() || u === 'waka-sarpras' || ['jurusan', 'tefa'].includes(UNIT[u]?.type) || ['lsp', 'bkk'].includes(u);
+  if (facOk) items.push(['facility', 'Fasilitas', 'building']);
   if (isAdmin()) {
     groups.push(['Unit', [['units', 'Profil Unit & Waka', 'unit'], ['product', 'Katalog TEFA', 'bag'], ['dudi', 'DUDI / Mitra Industri', 'handshake'], ['lowongan', 'Lowongan (BKK)', 'job'], ['skema', 'Skema (LSP)', 'badge'], ['/sarpras', 'SI-SARPRAS (Inventaris)', 'box']]]);
     groups.push(['Sekolah', [['settings', 'Pengaturan Situs', 'gear'], ['users', 'Pengguna & Akses', 'users'], ['profil-guru', 'Profil Guru', 'idcard'], ['messages', 'Pesan Masuk', 'mail'], ['backup', 'Backup & Pemulihan', 'shield']]]);
@@ -523,7 +578,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 32</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 33</span>
       </div>
     </aside>
     <div class="main">
