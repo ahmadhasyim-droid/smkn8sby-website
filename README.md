@@ -1,6 +1,6 @@
 # Website SMK Negeri 8 Surabaya
 
-Website resmi SMKN 8 Surabaya dengan **5 Program Keahlian** (Kecantikan, Perhotelan, Kuliner/Tata Boga, Desain Komunikasi Visual/DKV, Tata Busana), **2 Lembaga** (LSP P1 & Bursa Kerja Khusus), dan **5 Teaching Factory (TEFA)** — masing-masing punya halaman, kegiatan, agenda, galeri, dan akun pengelola sendiri.
+Website resmi SMKN 8 Surabaya dengan **5 Program Keahlian** (Kecantikan, Perhotelan, Kuliner/Tata Boga, Desain Komunikasi Visual/DKV, Tata Busana), **1 Program Layanan Pendidikan Inklusi**, **2 Lembaga** (LSP P1 & Bursa Kerja Khusus), dan **5 Teaching Factory (TEFA)** — masing-masing punya halaman, kegiatan, agenda, galeri, dan akun pengelola sendiri.
 
 Teknologi: **GitHub** (penyimpanan kode) → **Cloudflare Pages** (hosting gratis) + **Cloudflare D1** (database gratis). Tidak perlu hosting berbayar.
 

@@ -175,6 +175,19 @@ async function ensureSchema(db) {
   } catch (_) { /* abaikan */ }
   const stmts = [];
   for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) stmts.push(db.prepare(`INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)`).bind(k, v));
+  // Sekali jalan: sebut layanan pendidikan inklusi pada teks hero beranda (teks buatan admin dipertahankan)
+  try {
+    const done = await db.prepare(`SELECT value FROM settings WHERE key='hero_inklusi_done'`).first('value');
+    if (!done) {
+      const cur = await db.prepare(`SELECT value FROM settings WHERE key='hero_subtitle'`).first('value');
+      if (cur && !/inklusi/i.test(cur)) {
+        const add = 'layanan pendidikan inklusi bagi peserta didik berkebutuhan khusus';
+        const next = /,\s*didukung/i.test(cur) ? cur.replace(/,\s*didukung/i, `, ${add}, didukung`) : `${cur.replace(/\s*\.?\s*$/, '')}, serta ${add}.`;
+        stmts.push(db.prepare(`UPDATE settings SET value=? WHERE key='hero_subtitle'`).bind(next));
+      }
+      stmts.push(db.prepare(`INSERT OR REPLACE INTO settings(key,value) VALUES('hero_inklusi_done','1')`));
+    }
+  } catch (_) { /* abaikan */ }
   for (const u of DEFAULT_UNITS) {
     stmts.push(db.prepare(`INSERT OR IGNORE INTO units(slug,type,name,short,tagline,color,icon,logo,description,kompetensi,prospek,parent,sort,updated_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(u.slug, u.type, u.name, u.short, u.tagline, u.color, u.icon, u.logo || '', u.description, u.kompetensi, u.prospek, u.parent || null, u.sort, now()));

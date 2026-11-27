@@ -991,3 +991,14 @@ select.chip-btn { appearance: auto; padding-right: 10px; }
 .hg-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
 .hg-head h3 { display: flex; align-items: center; gap: 10px; font-size: 1.3rem; font-weight: 800; font-stretch: 88%; text-transform: uppercase; margin: 0; }
 .hg-head h3 .ico { width: 22px; height: 22px; color: #0f766e; }
+/* Program Layanan (Inklusi) — tampil terpisah dari program keahlian */
+.dd-sep { display: block; font-size: .66rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 10px 12px 4px; margin-top: 6px; border-top: 1px dashed var(--line); }
+.layanan-card { --c: #16a085; display: grid; grid-template-columns: 88px 1fr auto; gap: 20px; align-items: center; margin-top: 18px; padding: 22px 26px; border-radius: var(--radius); background: color-mix(in srgb, var(--c) 8%, white); border: 1px solid color-mix(in srgb, var(--c) 30%, white); border-left: 6px solid var(--c); transition: .2s; }
+.layanan-card:hover { background: color-mix(in srgb, var(--c) 14%, white); }
+.layanan-card .lg { width: 88px; height: 88px; background: #fff; border-radius: 10px; display: grid; place-items: center; padding: 8px; color: var(--c); }
+.layanan-card .lg img { max-height: 72px; object-fit: contain; } .layanan-card .lg .ico { width: 44px; height: 44px; }
+.layanan-card h3 { font-size: 1.4rem; font-stretch: 82%; text-transform: uppercase; font-weight: 800; color: var(--ink); }
+.layanan-card p { color: #4a5565; margin: 6px 0 0; font-size: .92rem; }
+.layanan-card .go { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--c); color: #fff; }
+.layanan-card .go .ico { width: 20px; height: 20px; }
+@media (max-width: 640px) { .layanan-card { grid-template-columns: 64px 1fr; padding: 18px; gap: 14px; } .layanan-card .lg { width: 64px; height: 64px; } .layanan-card .go { display: none; } .layanan-card h3 { font-size: 1.15rem; } }

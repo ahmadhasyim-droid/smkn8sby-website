@@ -82,6 +82,10 @@ const SCHOOL_UNIT = { slug: 'sekolah', name: 'Sekolah', short: 'SMKN 8', color: 
 const unitOf = (slug) => UNITS[slug] || SCHOOL_UNIT;
 const unitUrl = (u) => (u.type === 'lembaga' ? `/lembaga/${u.slug}` : u.type === 'waka' ? `/waka/${u.slug.replace(/^waka-/, '')}` : u.type === 'tefa' ? `/tefa/${u.slug.replace(/^tefa-/, '')}` : u.type === 'jurusan' ? `/jurusan/${u.slug}` : '/profil');
 const TYPE_LABEL = { jurusan: 'Program Keahlian', lembaga: 'Lembaga', tefa: 'Teaching Factory', waka: 'Wakil Kepala Sekolah' };
+// Inklusi = program LAYANAN (bukan program keahlian): halamannya sama seperti jurusan, tetapi disebut terpisah
+const SERVICE_UNITS = ['inklusi'];
+const isService = (u) => !!u && SERVICE_UNITS.includes(u.slug);
+const typeLabel = (u) => (isService(u) ? 'Program Layanan' : TYPE_LABEL[u.type] || 'Unit');
 // Pilihan unit (dropdown berkelompok) untuk filter berita, agenda & galeri
 const unitSelect = (cur, all = 'Semua unit') => {
   const grp = (t, label) => { const us = Object.values(UNITS).filter((u) => u.type === t); return us.length ? `<optgroup label="${label}">${us.map((u) => `<option value="${u.slug}"${u.slug === cur ? ' selected' : ''}>${esc(u.name)}</option>`).join('')}</optgroup>` : ''; };
@@ -225,7 +229,7 @@ function renderShell() {
         ${ddLink('/perpustakaan', 'Perpustakaan', 'Profil & layanan perpustakaan', 'book', '#16966a')}
         ${ddLink('/dudi', 'DUDI / Mitra Industri', 'Industri yang bekerja sama', 'handshake', '#7c4bc4')}
       </div></div>
-      <div class="dd"><button aria-haspopup="true">Program Keahlian ${icon('chev')}</button><div class="dd-panel">${jur.map(ddItem).join('')}</div></div>
+      <div class="dd"><button aria-haspopup="true">Program Keahlian ${icon('chev')}</button><div class="dd-panel">${jur.filter((u) => !isService(u)).map(ddItem).join('')}${jur.some(isService) ? `<span class="dd-sep mono">Program Layanan</span>${jur.filter(isService).map(ddItem).join('')}` : ''}</div></div>
       <div class="dd"><button aria-haspopup="true">Lembaga ${icon('chev')}</button><div class="dd-panel">${lem.map(ddItem).join('')}</div></div>
       ${tefa.length ? `<div class="dd"><button aria-haspopup="true">TEFA ${icon('chev')}</button><div class="dd-panel">${ddLink('/tefa', 'Toko TEFA', 'Semua produk & layanan, pesan via WhatsApp', 'bag', '#f26836')}${tefa.map(ddItem).join('')}</div></div>` : ''}
       <a href="/dudi"${act('dudi')}>DUDI</a>
@@ -265,7 +269,7 @@ function renderShell() {
         </div>
         <div class="socials">${socialLinks(s)}</div>
       </div>
-      <div><h4>Program Keahlian</h4><ul>${jur.map((u) => `<li><a href="${unitUrl(u)}">${esc(u.name)}</a></li>`).join('')}</ul></div>
+      <div><h4>Program Keahlian</h4><ul>${jur.filter((u) => !isService(u)).map((u) => `<li><a href="${unitUrl(u)}">${esc(u.name)}</a></li>`).join('')}${jur.filter(isService).map((u) => `<li><a href="${unitUrl(u)}">Layanan ${esc(u.name)}</a></li>`).join('')}</ul></div>
       <div><h4>Lembaga & Layanan</h4><ul>${lem.map((u) => `<li><a href="${unitUrl(u)}">${esc(u.name)}</a></li>`).join('')}
         ${s.spmb_link ? `<li><a href="${esc(safeUrl(s.spmb_link))}" target="_blank" rel="noopener">Info SPMB / PPDB</a></li>` : ''}</ul></div>
       ${tefa.length ? `<div><h4>Teaching Factory</h4><ul><li><a href="/tefa"><b>Toko TEFA</b></a></li>${tefa.map((u) => `<li><a href="${unitUrl(u)}">${esc(u.name)}</a></li>`).join('')}</ul></div>` : ''}
@@ -395,8 +399,9 @@ PAGES.home = async (main) => {
   const title = esc(s.hero_title || '').replace(/,\s*(.+)$/, ',<br><em>$1</em>');
   const pos = ['left:0;top:10%', 'right:0;top:2%', 'right:-2%;top:50%', 'right:8%;top:88%', 'left:0;top:74%', 'left:-6%;top:42%'];
   const ticker = [s.running_text, ...jur.map((u) => u.name), ...lem.map((u) => u.short), ...tefa.map((u) => u.name)].filter(Boolean);
+  const keahlian = jur.filter((u) => !isService(u)), layanan = jur.filter(isService);
   const stats = [
-    [jur.length, 'Program keahlian'], [tefa.length || '', 'Teaching Factory'], ['P1', 'Lembaga Sertifikasi Profesi'], ['BKK', 'Layanan bursa kerja khusus'],
+    [keahlian.length, 'Program keahlian'], [layanan.length || '', 'Program layanan inklusi'], [tefa.length || '', 'Teaching Factory'], ['P1', 'Lembaga Sertifikasi Profesi'], ['BKK', 'Layanan bursa kerja khusus'],
     [s.stat_siswa, 'Peserta didik'], [s.stat_guru, 'Guru & tenaga kependidikan'], [s.stat_mitra || SITE.counts.dudi || '', 'Mitra industri (DUDI)'], [s.stat_alumni, 'Lulusan terserap kerja'],
   ].filter(([v]) => v !== '' && v != null);
 
@@ -423,14 +428,18 @@ PAGES.home = async (main) => {
   <div class="ticker" aria-hidden="true"><div class="ticker-track">${[0, 1].map(() => `<span>${ticker.map((t) => `<span>${esc(t)}</span>`).join('')}</span>`).join('')}</div></div>
 
   <section class="section" id="program"><div class="wrap">
-    ${secHead('01', 'Program Keahlian', `${['Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan'][jur.length - 1] || jur.length} keahlian,<br>satu kota kreatif`, 'Setiap program keahlian punya laboratorium, kegiatan, dan halaman sendiri. Pilih untuk melihat profil, kompetensi, kegiatan, dan galerinya.')}
-    <div class="prog-grid n${jur.length}">${jur.map((u, i) => `
+    ${secHead('01', 'Program Keahlian', `${['Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan'][keahlian.length - 1] || keahlian.length} keahlian,<br>satu kota kreatif`, 'Setiap program keahlian punya laboratorium, kegiatan, dan halaman sendiri. Pilih untuk melihat profil, kompetensi, kegiatan, dan galerinya.')}
+    <div class="prog-grid n${keahlian.length}">${keahlian.map((u, i) => `
       <a class="prog" href="${unitUrl(u)}" style="--c:${u.color}">
-        <span class="num">${String(i + 1).padStart(2, '0')} / ${String(jur.length).padStart(2, '0')}</span>
+        <span class="num">${String(i + 1).padStart(2, '0')} / ${String(keahlian.length).padStart(2, '0')}</span>
         <span class="go">${icon('arrow')}</span>
         <span class="p-ico">${unitMark(u)}</span>
         <h3>${esc(u.name)}</h3><p>${esc(u.tagline || '')}</p>
       </a>`).join('')}</div>
+    ${layanan.map((u) => `<a class="layanan-card" href="${unitUrl(u)}" style="--c:${u.color}">
+        <span class="lg">${unitMark(u)}</span>
+        <span><span class="mono" style="color:var(--c)">Program Layanan</span><h3>Layanan Pendidikan ${esc(u.name)}</h3><p>${esc(u.tagline || '')}</p></span>
+        <span class="go">${icon('arrow')}</span></a>`).join('')}
     <div class="lembaga-grid">${lem.map((u) => `
       <a class="lembaga-card" href="${unitUrl(u)}" style="--c:${u.color}">
         <span class="lg">${unitMark(u)}</span>
@@ -686,8 +695,8 @@ PAGES.unit = async (main) => {
   <section class="page-hero unit-hero${unit.cover ? ' has-photo' : ''}" ${unit.cover ? `style="--hero-img:url('${esc(unit.cover)}')"` : ''}><div class="wrap">
     <div class="unit-logo">${unitMark(unit)}</div>
     <div>
-      <nav class="crumbs mono"><a href="/">Beranda</a><span>${TYPE_LABEL[unit.type] || 'Unit'}</span><span>${esc(unit.short || unit.name)}</span></nav>
-      <span class="unit-type mono">${TYPE_LABEL[unit.type] || 'Unit'}</span>${parent ? ` <a class="unit-type mono" style="background:rgba(255,255,255,.12)" href="${unitUrl(parent)}">${esc(parent.name)} →</a>` : ''}
+      <nav class="crumbs mono"><a href="/">Beranda</a><span>${typeLabel(unit)}</span><span>${esc(unit.short || unit.name)}</span></nav>
+      <span class="unit-type mono">${typeLabel(unit)}</span>${parent ? ` <a class="unit-type mono" style="background:rgba(255,255,255,.12)" href="${unitUrl(parent)}">${esc(parent.name)} →</a>` : ''}
       <h1>${esc(unit.name)}</h1>${unit.tagline ? `<p>${esc(unit.tagline)}</p>` : ''}
     </div>
   </div><div class="bar"></div></section>
@@ -730,7 +739,7 @@ PAGES.unit = async (main) => {
     <aside>
       ${myTefa ? `<a class="side-card tefa-link" href="${unitUrl(myTefa)}" style="--c:${myTefa.color}"><h4>Teaching Factory</h4><span class="head-card"><span class="av">${icon('factory')}</span><span><b>${esc(myTefa.name)}</b><span>${esc(myTefa.tagline || '')}</span></span></span></a>` : ''}
       ${parent ? `<a class="side-card tefa-link" href="${unitUrl(parent)}" style="--c:${parent.color}"><h4>Program keahlian induk</h4><span class="head-card"><span class="av">${unitMark(parent)}</span><span><b>${esc(parent.name)}</b><span>Lihat program keahlian →</span></span></span></a>` : ''}
-      ${unit.head_name ? `<div class="side-card"><h4>${isJur ? 'Ketua Program Keahlian' : isTefa ? 'Manajer TEFA' : isWaka ? 'Wakil Kepala Sekolah' : 'Penanggung Jawab'}</h4><div class="head-card"><span class="av">${unit.head_photo ? `<img src="${esc(unit.head_photo)}" alt="">` : esc(unit.head_name.trim()[0] || '?')}</span><span><b>${esc(unit.head_name)}</b><span>${esc(unit.head_title || '')}</span></span></div></div>` : ''}
+      ${unit.head_name ? `<div class="side-card"><h4>${isService(unit) ? 'Koordinator Layanan Inklusi' : isJur ? 'Ketua Program Keahlian' : isTefa ? 'Manajer TEFA' : isWaka ? 'Wakil Kepala Sekolah' : 'Penanggung Jawab'}</h4><div class="head-card"><span class="av">${unit.head_photo ? `<img src="${esc(unit.head_photo)}" alt="">` : esc(unit.head_name.trim()[0] || '?')}</span><span><b>${esc(unit.head_name)}</b><span>${esc(unit.head_title || '')}</span></span></div></div>` : ''}
       <div class="side-card"><h4>Kontak ${esc(unit.short || '')}</h4><div class="contact-list">
         ${unit.phone ? `<a href="${waLink(unit.phone)}" target="_blank" rel="noopener">${icon('wa')}${esc(unit.phone)}</a>` : ''}
         ${unit.email ? `<a href="mailto:${esc(unit.email)}">${icon('mail')}${esc(unit.email)}</a>` : ''}
@@ -1249,7 +1258,7 @@ async function guruProfile(main, slug) {
   <section class="gp-hero" style="--c:${c}"><div class="wrap">
     <nav class="crumbs mono no-print" aria-label="Breadcrumb"><a href="/">Beranda</a><span><a href="/guru">Profil Guru</a></span><span>${esc(g.full_name)}</span></nav>
     <div class="gp-head">${guruAvatar(g, 'xl')}
-      <div class="gp-id"><span class="mono gp-kicker">${esc(b ? (b.slug ? 'Program Keahlian ' : '') + b.name : 'SMK Negeri 8 Surabaya')}</span>
+      <div class="gp-id"><span class="mono gp-kicker">${esc(b ? (b.slug ? (isService(b) ? 'Program Layanan ' : 'Program Keahlian ') : '') + b.name : 'SMK Negeri 8 Surabaya')}</span>
         <h1>${esc(g.full_name)}</h1>
         <p class="gp-pos">${esc(g.position || 'Guru SMK Negeri 8 Surabaya')}</p>
         ${g.subjects ? `<p class="gp-sub">${icon('book')}<span>Mengampu: ${esc(g.subjects)}</span></p>` : ''}
