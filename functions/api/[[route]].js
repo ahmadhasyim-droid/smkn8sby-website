@@ -1463,6 +1463,42 @@ export async function onRequest(ctx) {
       }
     }
 
+    // Impor fasilitas dari Excel (foto diisi manual sesudahnya). Baris dengan nama + pengelola yang sama diperbarui, fotonya tidak disentuh.
+    if (area === 'facility' && parts[2] === 'import' && method === 'POST') {
+      const res = RESOURCES.facility;
+      if (!canUseResource(user, res)) return err('Anda tidak memiliki akses ke menu ini.', 403);
+      const b = await body();
+      const rows = Array.isArray(b.rows) ? b.rows.slice(0, 500) : [];
+      if (!rows.length) return err('Tidak ada baris data untuk diimpor.');
+      const all = fullScope(user, res);
+      const units = new Set((await db.prepare(`SELECT slug FROM units`).all()).results.map((r) => r.slug));
+      const exist = new Map((await db.prepare(`SELECT id, LOWER(TRIM(name)) n, unit_slug FROM facilities`).all()).results.map((r) => [`${r.n}|${r.unit_slug}`, r.id]));
+      const t = now(); let inserted = 0, updated = 0, skipped = 0; const stmts = [];
+      for (const raw of rows) {
+        const d = pickFields(res, raw);
+        delete d.image; delete d.images; delete d.featured;
+        if (!d.name) { skipped++; continue; }
+        d.unit_slug = all ? (d.unit_slug && (d.unit_slug === 'sekolah' || units.has(d.unit_slug)) ? d.unit_slug : 'sekolah') : user.unit_slug;
+        if (!FAC_CATS.includes(d.category)) d.category = 'lainnya';
+        if (d.condition && !['baik', 'cukup', 'perbaikan'].includes(d.condition)) d.condition = 'baik';
+        const key = `${d.name.trim().toLowerCase()}|${d.unit_slug}`;
+        const id = exist.get(key);
+        if (id === -1) { skipped++; continue; } // nama sama muncul dua kali di file
+        if (id) {
+          if (b.mode === 'skip') { skipped++; continue; }
+          const k = Object.keys(d).filter((x) => d[x] !== '' && d[x] != null);
+          stmts.push(db.prepare(`UPDATE facilities SET ${k.map((x) => x + '=?').join(',')}, updated_at=? WHERE id=?`).bind(...k.map((x) => d[x]), t, id)); updated++;
+        } else {
+          d.created_by = user.id; d.created_at = t; d.updated_at = t;
+          const k = Object.keys(d);
+          stmts.push(db.prepare(`INSERT INTO facilities(${k.join(',')}) VALUES(${k.map(() => '?').join(',')})`).bind(...k.map((x) => d[x]))); inserted++;
+          exist.set(key, -1); // cegah duplikat di dalam file yang sama
+        }
+      }
+      for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
+      return json({ ok: true, inserted, updated, skipped });
+    }
+
     // CRUD umum: posts, agenda, gallery, lowongan, skema
     const res = RESOURCES[area];
     if (res) {

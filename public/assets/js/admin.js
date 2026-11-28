@@ -251,7 +251,7 @@ function bindImageTools(ed, area) {
 let docImportP = null;
 const loadDocImport = () => (docImportP ||= new Promise((ok, no) => {
   if (window.DocImport) return ok(window.DocImport);
-  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=33';
+  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=34';
   sc.onload = () => ok(window.DocImport); sc.onerror = () => { docImportP = null; no(new Error('Gagal memuat fitur impor. Periksa koneksi lalu coba lagi.')); };
   document.head.appendChild(sc);
 }));
@@ -578,7 +578,7 @@ function renderShell() {
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 33</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 34</span>
       </div>
     </aside>
     <div class="main">
@@ -624,10 +624,123 @@ V.dashboard = async (view) => {
     </div>`;
 };
 
+// ---------- Impor fasilitas dari Excel ----------
+let xlsxP = null;
+const loadXlsx = () => (xlsxP ||= new Promise((ok, no) => {
+  if (window.XLSX) return ok(window.XLSX);
+  const sc = document.createElement('script'); sc.src = '/assets/js/vendor/xlsx-0.18.5.full.min.js';
+  sc.onload = () => ok(window.XLSX); sc.onerror = () => { xlsxP = null; no(new Error('Gagal memuat modul Excel. Periksa koneksi lalu coba lagi.')); };
+  document.head.appendChild(sc);
+}));
+const FAC_COLS = ['Nama Fasilitas', 'Jenis', 'Pengelola', 'Lokasi', 'Jumlah Ruang', 'Kapasitas (orang)', 'Luas (m2)', 'Kondisi', 'Deskripsi', 'Perlengkapan', 'Urutan'];
+const facAll = () => isAdmin() || ME.unit_slug === 'waka-sarpras';
+const facOwnerNames = () => (facAll() ? ['Sekolah', ...UNITS.filter((u) => u.type !== 'waka').map((u) => u.name)] : [UNIT[ME.unit_slug]?.name || ME.unit_slug]);
+async function facTemplate() {
+  try {
+    const X = await loadXlsx();
+    const ws = X.utils.aoa_to_sheet([FAC_COLS]);
+    ws['!cols'] = [34, 30, 26, 24, 13, 16, 10, 16, 44, 44, 8].map((wch) => ({ wch }));
+    const ex = [['Aula Utama', 'Aula & ruang pertemuan', 'Sekolah', 'Gedung A lantai 3', 1, 400, 600, 'Baik', 'Aula serbaguna untuk upacara, seminar, dan wisuda.', 'AC; Sound system; Proyektor; Panggung', 1],
+      ['Ruang Kelas Teori', 'Ruang kelas', 'Sekolah', 'Gedung A & B', 36, 36, '', 'Baik', '', 'Smart TV; Kipas angin; Wi-Fi', 2],
+      ['Laboratorium Pastry & Bakery', 'Laboratorium & bengkel praktik', facAll() ? 'Kuliner / Tata Boga' : facOwnerNames()[0], 'Gedung C lantai 1', 1, 24, 120, 'Baik', 'Praktik roti, kue, dan pastry.', 'Oven deck; Mixer planetary; Chiller', 3]];
+    const guide = [['PETUNJUK PENGISIAN TEMPLATE FASILITAS'], [''],
+      ['1. Isi data di sheet "Fasilitas" mulai baris ke-2 (baris 1 adalah judul kolom, jangan diubah).'],
+      ['2. Hanya kolom "Nama Fasilitas" yang wajib diisi. Kolom lain boleh dikosongkan.'],
+      ['3. Foto TIDAK diisi di Excel. Setelah impor, buka tiap fasilitas di panel lalu unggah foto utama & foto lainnya.'],
+      ['4. Bila nama fasilitas + pengelola sudah ada di website, datanya akan DIPERBARUI (foto tetap aman), bukan dibuat ganda.'],
+      ['5. Perlengkapan dipisahkan dengan titik koma ( ; ), contoh: AC; Proyektor; Wi-Fi'],
+      [facAll() ? '6. Pengelola: tulis "Sekolah" untuk fasilitas umum (dikelola Sarpras), atau nama program/unit dari daftar di bawah.' : `6. Kolom Pengelola diabaikan: semua data otomatis tercatat milik ${UNIT[ME.unit_slug]?.name || 'unit Anda'}.`],
+      [''], ['PILIHAN KOLOM "Jenis"'], ...Object.values(FAC_LABEL).map((l) => ['   ' + l]),
+      [''], ['PILIHAN KOLOM "Pengelola"'], ...facOwnerNames().map((n) => ['   ' + n]),
+      [''], ['PILIHAN KOLOM "Kondisi"'], ['   Baik'], ['   Cukup'], ['   Perlu perbaikan'],
+      [''], ['CONTOH PENGISIAN (salin ke sheet "Fasilitas" bila perlu)'], FAC_COLS, ...ex];
+    const wg = X.utils.aoa_to_sheet(guide); wg['!cols'] = [{ wch: 34 }, { wch: 30 }, { wch: 22 }, { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 40 }, { wch: 40 }];
+    const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Fasilitas'); X.utils.book_append_sheet(wb, wg, 'Petunjuk');
+    X.writeFile(wb, 'Template_Impor_Fasilitas_SMKN8.xlsx');
+    toast('Template diunduh. Lihat sheet "Petunjuk" untuk cara pengisian.');
+  } catch (e) { toast(e.message, true); }
+}
+// pencocokan teks bebas ke kode
+const facCatOf = (t) => {
+  const v = String(t || '').toLowerCase().trim();
+  if (!v) return 'lainnya';
+  const byLabel = Object.entries(FAC_LABEL).find(([k, l]) => v === k || v === l.toLowerCase()); if (byLabel) return byLabel[0];
+  const rules = [['tefa', /tefa|teaching factory/], ['lab', /lab|bengkel|praktik|workshop|dapur|salon|spa/], ['kelas', /kelas/], ['studio', /studio/], ['aula', /aula|pertemuan|rapat|auditorium/],
+    ['olahraga', /olahraga|lapangan|gor|gym|basket|futsal|voli/], ['kreativitas', /kreativ|osis|ekskul|ekstrakurikuler/], ['perpustakaan', /perpus|pustaka|literasi/],
+    ['ibadah', /ibadah|masjid|musholla|mushola|musala|kapel/], ['kesehatan', /uks|kesehatan|klinik/], ['kantin', /kantin|koperasi/], ['toilet', /toilet|wc|kamar mandi/],
+    ['taman', /taman|terbuka|green|halaman/], ['kantor', /kantor|guru|tata usaha|\btu\b|layanan|kepala sekolah|bk\b|bimbingan/], ['parkir', /parkir/]];
+  return (rules.find(([, r]) => r.test(v)) || ['lainnya'])[0];
+};
+const facUnitOf = (t) => {
+  const v = String(t || '').toLowerCase().trim();
+  if (!v || /^(sekolah|umum|sarpras|sarana|semua)/.test(v)) return 'sekolah';
+  const u = UNITS.find((x) => [x.slug, x.name, x.short].filter(Boolean).some((n) => n.toLowerCase() === v)) || UNITS.find((x) => x.name.toLowerCase().includes(v) || v.includes(x.name.toLowerCase().split(' / ')[0]));
+  return u ? u.slug : null;
+};
+const facCondOf = (t) => { const v = String(t || '').toLowerCase(); return !v ? '' : /perbaik|rusak/.test(v) ? 'perbaikan' : /cukup|sedang/.test(v) ? 'cukup' : 'baik'; };
+const num = (v) => { const n = parseInt(String(v ?? '').replace(/[^\d]/g, ''), 10); return Number.isFinite(n) ? n : ''; };
+function facImport(done) {
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="modal-card" style="width:min(920px,100%)"><h2>Impor fasilitas dari Excel</h2>
+    <p class="t-sub" style="white-space:normal;margin:0 0 14px">Gunakan <a href="#" id="tplLink" style="color:var(--blue);font-weight:700">template Excel</a> agar kolomnya sesuai. Foto diunggah manual setelah data masuk. Fasilitas dengan <b>nama & pengelola yang sama</b> akan diperbarui, tidak dibuat ganda.</p>
+    <label class="field"><span>Pilih file Excel (.xlsx / .xls)</span><input type="file" id="xf" accept=".xlsx,.xls,.csv"></label>
+    <div id="xprev" style="margin-top:14px"></div>
+    <div class="form-actions"><button type="button" class="btn btn-line" data-x>Tutup</button><button class="btn btn-primary" id="xgo" disabled>Impor</button></div></div>`;
+  document.body.appendChild(m);
+  const close = () => m.remove();
+  $('[data-x]', m).onclick = close; m.addEventListener('click', (e) => { if (e.target === m) close(); });
+  $('#tplLink', m).onclick = (e) => { e.preventDefault(); facTemplate(); };
+  let rows = [];
+  $('#xf', m).onchange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    $('#xprev', m).innerHTML = '<div class="empty">Membaca file…</div>';
+    try {
+      const X = await loadXlsx();
+      const wb = X.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+      const ws = wb.Sheets.Fasilitas || wb.Sheets[wb.SheetNames[0]];
+      const aoa = X.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+      const hi = aoa.findIndex((r) => r.some((c) => /nama/i.test(String(c))));
+      if (hi < 0) throw new Error('Kolom "Nama Fasilitas" tidak ditemukan. Gunakan template Excel yang disediakan.');
+      const head = aoa[hi].map((h) => String(h).toLowerCase().replace(/\*/g, '').trim());
+      const col = (re) => head.findIndex((h) => re.test(h));
+      const C = { name: col(/nama/), cat: col(/jenis|kategori/), own: col(/pengelola|pemilik|unit|jurusan/), loc: col(/lokasi|letak|gedung/), qty: col(/jumlah/), cap: col(/kapasitas/),
+        area: col(/luas/), cond: col(/kondisi/), desc: col(/deskripsi|keterangan/), feat: col(/perlengkapan|fasilitas pendukung|sarana/), sort: col(/urut/) };
+      const g = (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '');
+      rows = aoa.slice(hi + 1).filter((r) => g(r, C.name)).map((r) => {
+        const ownTxt = g(r, C.own), u = facAll() ? facUnitOf(ownTxt) : ME.unit_slug;
+        return { name: g(r, C.name).slice(0, 150), category: facCatOf(g(r, C.cat)), catTxt: g(r, C.cat), unit_slug: u || 'sekolah', ownWarn: facAll() && ownTxt && !u ? ownTxt : '',
+          location: g(r, C.loc), quantity: num(g(r, C.qty)), capacity: num(g(r, C.cap)), area: num(g(r, C.area)), condition: facCondOf(g(r, C.cond)),
+          description: g(r, C.desc), features: g(r, C.feat).split(/\s*[;\n]\s*/).filter(Boolean).join('\n'), sort: num(g(r, C.sort)) };
+      });
+      if (!rows.length) throw new Error('Tidak ada baris data. Isi data mulai baris ke-2 di sheet "Fasilitas".');
+      const warn = rows.filter((r) => r.ownWarn).length;
+      $('#xprev', m).innerHTML = `<div class="notice ${warn ? 'bad' : 'info'}"><b>${rows.length} fasilitas</b> siap diimpor.${warn ? ` ${warn} baris punya pengelola yang tidak dikenali dan akan dicatat sebagai <b>Sekolah</b> (bisa diubah nanti).` : ''}</div>
+        <label class="inline" style="margin:4px 0 10px;display:flex;gap:8px;align-items:center;font-size:.88rem"><input type="checkbox" id="xupd" checked> Perbarui data yang sudah ada (nama & pengelola sama). Bila tidak dicentang, baris tersebut dilewati.</label>
+        <div class="table-wrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>#</th><th>Nama</th><th>Jenis</th><th>Pengelola</th><th>Lokasi</th><th>Jml</th><th>Kap.</th><th>Kondisi</th></tr></thead><tbody>
+        ${rows.map((r, i) => `<tr><td>${i + 1}</td><td><span class="t-title">${esc(r.name)}</span>${r.features ? `<span class="t-sub">${esc(r.features.split('\n').length)} perlengkapan</span>` : ''}</td>
+          <td>${esc(FAC_LABEL[r.category])}${r.catTxt && facCatOf(r.catTxt) === 'lainnya' && !/lain/i.test(r.catTxt) ? `<span class="t-sub" style="color:var(--bad)">"${esc(r.catTxt)}" tidak dikenal</span>` : ''}</td>
+          <td>${r.unit_slug === 'sekolah' ? 'Sekolah' : esc(UNIT[r.unit_slug]?.name || r.unit_slug)}${r.ownWarn ? `<span class="t-sub" style="color:var(--bad)">"${esc(r.ownWarn)}" tidak dikenal</span>` : ''}</td>
+          <td>${esc(r.location || '-')}</td><td>${r.quantity || '-'}</td><td>${r.capacity || '-'}</td><td>${esc({ baik: 'Baik', cukup: 'Cukup', perbaikan: 'Perbaikan' }[r.condition] || '-')}</td></tr>`).join('')}</tbody></table></div>`;
+      $('#xgo', m).disabled = false; $('#xgo', m).textContent = `Impor ${rows.length} fasilitas`;
+    } catch (er) { rows = []; $('#xgo', m).disabled = true; $('#xprev', m).innerHTML = `<div class="notice bad">${esc(er.message)}</div>`; }
+  };
+  $('#xgo', m).onclick = async () => {
+    if (!rows.length) return;
+    const btn = $('#xgo', m); btn.disabled = true; btn.textContent = 'Mengimpor…';
+    try {
+      const body = { mode: $('#xupd', m)?.checked ? 'update' : 'skip', rows: rows.map(({ catTxt, ownWarn, ...r }) => r) };
+      const r = await api('admin/facility/import', { method: 'POST', body });
+      $('#xprev', m).innerHTML = `<div class="notice info"><b>Impor selesai.</b> ${r.inserted} fasilitas baru, ${r.updated} diperbarui${r.skipped ? `, ${r.skipped} dilewati` : ''}.<br>Langkah berikutnya: buka tiap fasilitas (tombol <b>Edit</b>) untuk mengunggah <b>foto utama</b> dan foto lainnya.</div>`;
+      btn.textContent = 'Selesai'; toast('Impor fasilitas selesai'); done && done();
+    } catch (er) { toast(er.message, true); btn.disabled = false; btn.textContent = `Impor ${rows.length} fasilitas`; }
+  };
+}
+
 // Daftar (tabel) umum
 async function listView(view, key) {
   const R = RES[key];
-  setHead(R.title, `<a class="btn btn-primary" href="#/${key}/new">${ic('plus')}Tambah ${R.single}</a>`);
+  setHead(R.title, `${key === 'facility' ? `<button class="btn btn-line" id="facTpl">${ic('dl')}Template Excel</button><button class="btn btn-line" id="facImp">${ic('upload')}Impor Excel</button>` : ''}<a class="btn btn-primary" href="#/${key}/new">${ic('plus')}Tambah ${R.single}</a>`);
+  if (key === 'facility') { $('#facTpl').onclick = facTemplate; $('#facImp').onclick = () => facImport(() => load()); }
   let page = 1, q = '', unit = '';
   view.innerHTML = `<div class="toolbar">
       ${['posts', 'dudi', 'prestasi'].includes(key) ? `<label class="search">${ic('search')}<input type="search" placeholder="${key === 'dudi' ? 'Cari nama industri…' : 'Cari judul…'}" id="q"></label>` : ''}
