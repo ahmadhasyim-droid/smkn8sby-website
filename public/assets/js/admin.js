@@ -251,7 +251,7 @@ function bindImageTools(ed, area) {
 let docImportP = null;
 const loadDocImport = () => (docImportP ||= new Promise((ok, no) => {
   if (window.DocImport) return ok(window.DocImport);
-  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=34';
+  const sc = document.createElement('script'); sc.src = '/assets/js/doc-import.js?v=35';
   sc.onload = () => ok(window.DocImport); sc.onerror = () => { docImportP = null; no(new Error('Gagal memuat fitur impor. Periksa koneksi lalu coba lagi.')); };
   document.head.appendChild(sc);
 }));
@@ -576,9 +576,10 @@ function renderShell() {
       <nav id="menu">${menu().map(([g, it]) => `<div class="grp">${esc(g)}</div>${it.map(([h, l, i]) => `<a href="${h.startsWith('/') ? h : '#/' + h}" data-h="${h}">${ic(i)}${esc(l)}${h === 'messages' ? '<span class="count" id="unread" hidden></span>' : h === 'review' ? '<span class="count" id="pending" hidden></span>' : h === 'notif' ? '<span class="count" id="notifc" hidden></span>' : ''}</a>`).join('')}`).join('')}</nav>
       <div class="side-foot">
         <a href="/" target="_blank">${ic('ext')}Lihat website</a>
+        ${SITE_ALUMNI ? `<a href="${esc(SITE_ALUMNI)}" target="_blank" rel="noopener">${ic('users')}Portal Alumni</a>` : ''}
         <a href="#/account">${ic('key')}Ganti password</a>
         <button id="logout">${ic('out')}Keluar</button>
-        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 34</span>
+        <span style="font-size:.7rem;color:#6e83a2;padding:4px 12px">Versi website: 35</span>
       </div>
     </aside>
     <div class="main">
@@ -925,6 +926,7 @@ V.settings = async (view) => {
       { k: 'hero_title', label: 'Judul besar', help: 'Teks setelah tanda koma akan berwarna oranye.' }, { k: 'hero_subtitle', label: 'Sub judul', type: 'textarea', rows: 2 },
       { k: 'hero_image', label: 'Foto latar beranda (opsional)', type: 'image' }, { k: 'running_text', label: 'Teks berjalan' },
       { k: 'spmb_link', label: 'Tautan info SPMB/PPDB (opsional)', type: 'url' },
+      { k: 'alumni_link', label: 'Alamat portal Alumni', type: 'url', help: 'Menu "Alumni" di website dan panel mengarah ke alamat ini. Kosongkan untuk menyembunyikan menu.' },
     ]],
     ['Statistik (kosongkan bila tidak ingin ditampilkan)', [
       { k: 'stat_siswa', label: 'Jumlah peserta didik', half: true }, { k: 'stat_guru', label: 'Jumlah guru & tendik', half: true },
@@ -1798,9 +1800,11 @@ async function refreshUnread() {
     for (const [id, n] of [['unread', d.unread], ['pending', d.pending]]) { const el = $('#' + id); if (el) { el.textContent = n || ''; el.hidden = !n; } }
   } catch { /* abaikan */ }
 }
+let SITE_ALUMNI = '';
 async function loadUnits() {
   const s = await fetch('/api/site').then((r) => r.json());
   UNITS = s.units; UNIT = Object.fromEntries(UNITS.map((u) => [u.slug, u]));
+  SITE_ALUMNI = /^https?:\/\//i.test(s.settings?.alumni_link || '') ? s.settings.alumni_link : '';
 }
 
 // ---------- Login / pembuatan admin pertama ----------

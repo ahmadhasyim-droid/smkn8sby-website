@@ -241,6 +241,7 @@ function renderShell() {
       ${tefa.length ? `<div class="dd"><button aria-haspopup="true">TEFA ${icon('chev')}</button><div class="dd-panel">${ddLink('/tefa', 'Toko TEFA', 'Semua produk & layanan, pesan via WhatsApp', 'bag', '#f26836')}${tefa.map(ddItem).join('')}</div></div>` : ''}
       <a href="/dudi"${act('dudi')}>DUDI</a>
       <a href="/perpustakaan"${act('perpustakaan')}>Perpustakaan</a>
+      ${s.alumni_link ? `<a href="${esc(safeUrl(s.alumni_link))}" target="_blank" rel="noopener" title="Portal Alumni SMK Negeri 8 Surabaya (tab baru)">Alumni</a>` : ''}
       <div class="dd"><button aria-haspopup="true"${['berita', 'artikel', 'agenda', 'galeri', 'prestasi'].includes(page) ? ' class="active"' : ''}>Informasi ${icon('chev')}</button><div class="dd-panel">
         ${ddLink('/berita', 'Berita & Kegiatan', 'Kabar terbaru sekolah & unit', 'news', '#235ba4')}
         ${ddLink('/berita?kategori=tulisan-guru', 'Opini & Artikel Guru', 'Opini, tips & tutorial, artikel praktis', 'user', '#0f766e')}
@@ -283,6 +284,7 @@ function renderShell() {
       <div><h4>Jelajahi</h4><ul>
         <li><a href="/profil">Profil Sekolah</a></li><li><a href="/program">Program Sekolah</a></li><li><a href="/dudi">DUDI / Mitra Industri</a></li><li><a href="/perpustakaan">Perpustakaan</a></li><li><a href="/prestasi">Prestasi Siswa</a></li><li><a href="/berita">Berita & Kegiatan</a></li>
         <li><a href="/agenda">Agenda</a></li><li><a href="/galeri">Galeri</a></li><li><a href="/kontak">Kontak</a></li>
+        ${s.alumni_link ? `<li><a href="${esc(safeUrl(s.alumni_link))}" target="_blank" rel="noopener">Portal Alumni ↗</a></li>` : ''}
         <li><a href="/admin/">Login Pengelola</a></li></ul></div>
     </div>
     <div class="foot-bottom"><span>© ${new Date().getFullYear()} ${esc(s.school_name)}. Hak cipta dilindungi.</span>
